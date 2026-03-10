@@ -2,79 +2,76 @@
 #include "drive.h"
 #include "motor.h"
 
-int class_;
-float angle;
-int action;
-
-bool driveEnabled = false;
+int class_ = 0;
+float angle = 0.0f;
+int action = 0;
 
 void setup()
 {
     initCommunication();
     initMotor();
+    initDrive();
 }
 
 void loop()
 {
-    if(readCommand(class_, angle, action))
+    // 새 명령 수신 시 값 갱신, 실패하면 이전 값 유지
+    readCommand(class_, angle, action);
+
+    // emergency 상태인데 사람/자동차가 사라졌으면 자동 복귀
+    if (driveMode == MODE_EMERGENCY && class_ != 3 && class_ != 4)
     {
-        Serial.print("class: ");
-        Serial.println(class_);
-
-        Serial.print("action: ");
-        Serial.println(action);
-
-        switch(class_)
-        {
-            case 9: // START
-                driveEnabled = true;
-                cancelRoutine();
-                action = ACT_FORWARD;
-            break;
-
-            case 10: // ARRIVE
-                driveEnabled = false;
-                emergencyStop();
-            break;
-
-            case 3: // 사람 감지 → 긴급정지
-                driveEnabled = false;
-                emergencyStop();
-            break;
-
-            case 2: // 물류 루틴
-                if(driveEnabled)
-                    startRoutine(logisticsRoutine, logisticsRoutineLength);
-            break;
-
-            case 6: // 주차 루틴
-                if(driveEnabled)
-                    startRoutine(parkingRoutine, parkingRoutineLength);
-            break;
-
-            case 5: // 직진
-                action = ACT_FORWARD;
-            break;
-
-            case 7: // 좌회전
-                action = ACT_LEFT;
-            break;
-
-            case 8: // 우회전
-                action = ACT_RIGHT;
-            break;
-
-            case 4: // 저속 주행
-                action = ACT_SLOW;
-            break;
-
-            default:
-            break;
-        }
+        driveMode = MODE_MANUAL;
     }
 
-    if(driveEnabled)
-        updateDrive(angle, action);
+    switch (class_)
+    {
+        case 0:
+            // 차선 인식 안됨 -> 직전 조향 유지
+            handleLineLost();
+            break;
+
+        case 1:
+            // 차선 인식 -> angle 반영 직진 보정
+            handleLineFollow(angle);
+            break;
+
+        case 2:
+        case 5:
+            // 물류 / 주차 표기 -> action 기반 특수 처리
+            handleSpecialTarget(class_, angle, action);
+            break;
+
+        case 3:
+        case 4:
+            // 사람 / 자동차 -> 즉시 정지
+            handleEmergencyStop();
+            break;
+
+        case 6:
+            // 임시: 좌회전
+            handleLeftTurn(angle);
+            break;
+
+        case 7:
+            // 임시: 직진
+            handleStraight(angle);
+            break;
+
+        case 8:
+            // 임시: 좌회전
+            handleLeftTurn(angle);
+            break;
+
+        case 9:
+            // 출발 신호
+            handleResume();
+            break;
+
+        default:
+            handleDefault();
+            break;
+    }
 
     updateRoutine();
 }

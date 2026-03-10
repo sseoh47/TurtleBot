@@ -1,24 +1,26 @@
 #include "drive.h"
 
-// 주행 시스템 전체의 현재 상태 저장하는 전역 변수
-DriveMode driveMode = MODE_MANUAL;
-
-// 현재 실행 중인 루틴의 상태 저장 변수
+// ================= 루틴 상태 =================
 static RoutineState routine =
 {
-    false,  // 현재 루틴 실행 중
-    0,      // 현재 단계 인덱스
-    0,      // 시작 시간
-    0,      // 루틴 길이
-    nullptr // 연결된 루틴 배열
+    false,
+    0,
+    0,
+    0,
+    nullptr
 };
+
+// ================= action 2 회전 상태 =================
+static bool rotateActionActive = false;
+static unsigned long rotateActionStart = 0;
+static const unsigned long ROTATE_90_MS = 2000;   // 실차 튜닝 필요
 
 // ================= 물류 루틴 =================
 TimedAction logisticsRoutine[] =
 {
-    {ACT_FORWARD,0,2000},
-    {ACT_REVERSE,0,1000},
-    {ACT_STOP,0,0}
+    {ACT_FORWARD, 0.0f, 1500},
+    {ACT_LEFT,    0.0f, 1200},
+    {ACT_STOP,    0.0f,    0}
 };
 
 const int logisticsRoutineLength =
@@ -27,84 +29,139 @@ const int logisticsRoutineLength =
 // ================= 주차 루틴 =================
 TimedAction parkingRoutine[] =
 {
-    {ACT_ROTATE,0,2000},
-    {ACT_FORWARD,0,1000},
-    {ACT_ROTATE,0,2000},
-    {ACT_REVERSE,0,2000},
-    {ACT_STOP,0,0}
+    {ACT_ROTATE,  0.0f, 1500},
+    {ACT_FORWARD, 0.0f, 1000},
+    {ACT_REVERSE, 0.0f, 1200},
+    {ACT_STOP,    0.0f,    0}
 };
 
 const int parkingRoutineLength =
     sizeof(parkingRoutine) / sizeof(TimedAction);
 
+// ================= 루틴 실행 여부 =================
+bool isRoutineActive()
+{
+    return routine.active;
+}
+
 // ================= 루틴 시작 =================
 void startRoutine(TimedAction* r, int length)
 {
-    // 현재 루틴 실행 중/긴급 정지면 새로운 루틴 시작X
-    if(driveMode != MODE_MANUAL)
+    if (driveMode != MODE_MANUAL)
         return;
 
-    routine.active = true;      //루틴 실행 중
-    routine.index = 0;          //0부터 시작
-    routine.start = millis();   //현재 단계 시작 시간 저장
-    routine.routine = r;        //현재 실행할 루틴 배열
-    routine.length = length;    //이 루틴의 전체 길이 저장
+    routine.active = true;
+    routine.index = 0;
+    routine.start = millis();
+    routine.routine = r;
+    routine.length = length;
 
-    driveMode = MODE_ROUTINE;   //특수 주행 모드로 변경
+    driveMode = MODE_ROUTINE;
 }
 
-// ================= 루틴 진행 =================
+// ================= 루틴 취소 =================
+void cancelRoutine()
+{
+    routine.active = false;
+    routine.index = 0;
+    routine.start = 0;
+    routine.length = 0;
+    routine.routine = nullptr;
+
+    rotateActionActive = false;
+
+    if (driveMode == MODE_ROUTINE)
+        driveMode = MODE_MANUAL;
+}
+
+// ================= 루틴 갱신 =================
 void updateRoutine()
 {
-    // 특수 주행이 비활성/연결된 루틴 배열X -> 동작X
-    if(!routine.active || routine.routine == nullptr)
+    if (!routine.active || routine.routine == nullptr)
         return;
 
-    // 배열 범위 보호
-    if(routine.index >= routine.length)
+    if (routine.index >= routine.length)
     {
-        stopMotors();               // 모터 정지
-        routine.active = false;     // 특수 주행 루틴 종료
-        driveMode = MODE_MANUAL;    // 일반 주행 상태로 복귀
+        stopMotors();
+        cancelRoutine();
         return;
     }
 
     unsigned long now = millis();
+    TimedAction &act = routine.routine[routine.index];
 
-    TimedAction &act = routine.routine[routine.index];  // 현재 특수 주행 루틴의 단계
+    executeBaseAction(act.action, act.angle);
 
-    executeBaseAction(act.action, act.angle);           // 현재 단계 행동 시작
-
-    // 종료 단계 검사
-    // 특수 주행 루틴 종료 후, 일반 주행 상태 모드로
-    if(act.duration == 0)
+    // duration 0이면 종료 단계
+    if (act.duration == 0)
     {
-        routine.active = false;
-        driveMode = MODE_MANUAL;
+        cancelRoutine();
         return;
     }
 
-    // 현재 단계 경과 시간 넘기면 다음 단계로
-    if(now - routine.start >= act.duration)
+    if (now - routine.start >= act.duration)
     {
         routine.index++;
         routine.start = now;
     }
 }
 
-// ================= 긴급 정지 =================
-void emergencyStop()
+// ================= class 2,5 특수 처리 =================
+void handleSpecialTarget(int classId, float angle, int action)
 {
-    stopMotors();
-    routine.active = false;
-    driveMode = MODE_EMERGENCY;
-}
+    if (driveMode == MODE_EMERGENCY)
+        return;
 
-// ================= 루틴 취소 =================
-// 현재 루틴만 취소
-// 일반 주행 상태로 복귀
-void cancelRoutine()
-{
-    routine.active = false;
-    driveMode = MODE_MANUAL;
+    // 루틴 중이면 일반 특수 처리 무시
+    if (driveMode == MODE_ROUTINE)
+        return;
+
+    switch (action)
+    {
+        case 1:
+            // action1 : 서행
+            executeBaseAction(ACT_SLOW, angle);
+            break;
+
+        case 2:
+            // action2 : 좌측 90도 회전(시간 기반)
+            if (!rotateActionActive)
+            {
+                rotateActionActive = true;
+                rotateActionStart = millis();
+            }
+
+            if (millis() - rotateActionStart < ROTATE_90_MS)
+            {
+                executeBaseAction(ACT_ROTATE, 0.0f);
+            }
+            else
+            {
+                rotateActionActive = false;
+                executeBaseAction(ACT_STOP, 0.0f);
+            }
+            break;
+
+        case 3:
+            // action3 : 정면 근접 정지
+            executeBaseAction(ACT_STOP, 0.0f);
+            break;
+
+        case 4:
+            // action4 : 하드코딩된 루틴 수행
+            if (classId == 2)
+                startRoutine(logisticsRoutine, logisticsRoutineLength);
+            else if (classId == 5)
+                startRoutine(parkingRoutine, parkingRoutineLength);
+            break;
+
+        case 9:
+            // 현재 비워둠
+            break;
+
+        default:
+            // 특수 action 없으면 기본 접근 주행
+            executeBaseAction(ACT_FORWARD, angle);
+            break;
+    }
 }
