@@ -40,10 +40,29 @@ void loop()
     if (!(action == 0 || action == 1 || action == 2 || action == 3 || action == 4 || action == 9))
         action = 0;
 
+
+    // -------------------------
+    // EMERGENCY 우선 처리
+    // -------------------------
+    if (class_ == 3 || class_ == 4)
+    {
+        handleEmergencyStop();
+        return;
+    }
+
     // emergency 상태인데 사람/자동차가 사라졌으면 자동 복귀
     if (driveMode == MODE_EMERGENCY && class_ != 3 && class_ != 4)
     {
         driveMode = MODE_MANUAL;
+    }
+
+    // -------------------------
+    // timedAction 진행 중
+    // -------------------------
+    if (timedActionActive)
+    {
+        handleTimedAction(currentAction, currentAngle, actionDuration);
+        return;
     }
 
     switch (class_)
@@ -56,6 +75,7 @@ void loop()
         case 1:
             // 차선 인식 -> angle 반영 직진 보정
             handleLineFollow(angle);
+            // 수정 : action 추가
             break;
 
         case 2:
@@ -64,21 +84,23 @@ void loop()
             handleSpecialTarget(class_, angle, action);
             break;
 
-        case 3:
-        case 4:
-            // 사람 / 자동차 -> 즉시 정지
-            handleEmergencyStop();
-            break;
+        // case 3:
+        // case 4:
+        //     // 사람 / 자동차 -> 즉시 정지
+        //     handleEmergencyStop();
+        //     break;
 
         case 6:
         case 8:
-            // 임시: 좌회전
-            handleLeftTurn(-30);
+            // 임시: 좌회전(2초)
+            handleTimedAction(ACT_LEFT, -30, 2000);
+            // handleLeftTurn(-30);
             break;
 
         case 7:
-            // 임시: 직진
-            handleStraight(angle);
+            // 임시: 직진(3초)
+            handleTimedAction(ACT_FORWARD, angle, 3000);
+            // handleStraight(angle);
             break;
 
         case 9:

@@ -29,7 +29,7 @@ const int logisticsRoutineLength =
 // ================= 주차 루틴 =================
 TimedAction parkingRoutine[] =
 {
-    {ACT_ROTATE,  0.0f, 1500},
+    {ACT_ROTATE_L,  0.0f, 1500},
     {ACT_FORWARD, 0.0f, 1000},
     {ACT_REVERSE, 0.0f, 1200},
     {ACT_STOP,    0.0f,    0}
@@ -125,6 +125,7 @@ void handleSpecialTarget(int classId, float angle, int action)
 
         case 2:
             // action2 : 좌측 90도 회전(시간 기반)
+            // 정지 + 90도 + 서행직진(angle=0)
             if (!rotateActionActive)
             {
                 rotateActionActive = true;
@@ -133,7 +134,7 @@ void handleSpecialTarget(int classId, float angle, int action)
 
             if (millis() - rotateActionStart < ROTATE_90_MS)
             {
-                executeBaseAction(ACT_ROTATE, 0.0f);
+                executeBaseAction(ACT_ROTATE_L, 0.0f);
             }
             else
             {

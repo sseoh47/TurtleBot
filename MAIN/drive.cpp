@@ -80,27 +80,65 @@ void handleLineFollow(float angle)
     executeBaseAction(ACT_FORWARD, angle);
 }
 
+// // =========================
+// // class 7 : 직진
+// // =========================
+// void handleStraight(float angle)
+// {
+//     if (driveMode == MODE_EMERGENCY || driveMode == MODE_ROUTINE)
+//         return;
+
+//     heldDriveAngle = angle;
+//     executeBaseAction(ACT_FORWARD, angle);
+// }
+
+// // =========================
+// // class 6,8 : 좌회전
+// // =========================
+// void handleLeftTurn(float angle)
+// {
+//     if (driveMode == MODE_EMERGENCY || driveMode == MODE_ROUTINE)
+//         return;
+
+//     executeBaseAction(ACT_LEFT, angle);
+// }
+
 // =========================
-// class 7 : 직진
+// class 6,8:좌회전 / 7:직진 통합
 // =========================
-void handleStraight(float angle)
+// 공통
+bool timedActionActive = false;     // 시간 행동 진행 여부
+unsigned long actionStart = 0;      // 시작 시각
+unsigned long actionDuration = 0;   // 유지 시간(ms)
+
+BaseAction currentAction;           // ACT_LEFT / ACT_FORWARD ...
+float currentAngle = 0;             // 조향각
+
+void handleTimedAction(BaseAction act, float angle, unsigned long duration)
 {
+    // 비상/루틴 중이면 실행 안 함
     if (driveMode == MODE_EMERGENCY || driveMode == MODE_ROUTINE)
         return;
 
-    heldDriveAngle = angle;
-    executeBaseAction(ACT_FORWARD, angle);
-}
+    // 처음 진입 시 시작 세팅
+    if (!timedActionActive)
+    {
+        timedActionActive = true;
+        actionStart = millis();
+        actionDuration = duration;
+        currentAction = act;
+        currentAngle = angle;
+    }
 
-// =========================
-// class 6,8 : 좌회전
-// =========================
-void handleLeftTurn(float angle)
-{
-    if (driveMode == MODE_EMERGENCY || driveMode == MODE_ROUTINE)
-        return;
+    // 행동 유지
+    executeBaseAction(currentAction, currentAngle);
 
-    executeBaseAction(ACT_LEFT, angle);
+    // 시간 종료 체크
+    if (millis() - actionStart >= actionDuration)
+    {
+        timedActionActive = false;
+        // executeBaseAction(ACT_FORWARD, 0);   // 기본 직진 복귀
+    }
 }
 
 // =========================

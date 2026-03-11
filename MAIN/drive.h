@@ -11,7 +11,7 @@ enum BaseAction
     ACT_LEFT,
     ACT_RIGHT,
     ACT_ROTATE_L,
-    ACT_ROTATE_R
+    ACT_ROTATE_R, //','빠져있어요~~!!
     ACT_REVERSE,
     ACT_STOP,
     ACT_SLOW
@@ -52,14 +52,23 @@ extern TimedAction parkingRoutine[];
 extern const int logisticsRoutineLength;
 extern const int parkingRoutineLength;
 
+extern bool timedActionActive;
+extern unsigned long actionStart;
+extern unsigned long actionDuration;
+
+extern BaseAction currentAction;
+extern float currentAngle;
+
 // ================= 초기화 =================
 void initDrive();
 
 // ================= 일반 주행 처리 =================
 void handleLineLost();
 void handleLineFollow(float angle);
-void handleStraight(float angle);
-void handleLeftTurn(float angle);
+// void handleStraight(float angle);
+// void handleLeftTurn(float angle);
+void handleTimedAction(BaseAction act, float angle, unsigned long duration);
+
 void handleEmergencyStop();
 void handleResume();
 void handleDefault();
