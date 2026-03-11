@@ -6,6 +6,10 @@ int class_ = 0;
 float angle = 0.0f;
 int action = 0;
 
+//통신끊김시 정지를 위한 변수
+unsigned long lastRxTime = 0;
+const unsigned long RX_TIMEOUT = 300; // ms
+
 void setup()
 {
     initCommunication();
@@ -15,8 +19,28 @@ void setup()
 
 void loop()
 {
-    // 새 명령 수신 시 값 갱신, 실패하면 이전 값 유지
-    readCommand(class_, angle, action);
+    //값 수신시 처리하는 코드
+    if (readCommand(class_, angle, action))
+    {
+        lastRxTime = millis();
+    }
+
+    // 통신 끊김 방어
+    if (millis() - lastRxTime > RX_TIMEOUT)
+    {
+        stopMotors();
+        return;
+    }
+
+    // 입력값 필터링
+    if (class_ < 0 || class_ > 9)
+        class_ = 0;
+
+    if (angle > 45.0f) angle = 45.0f;
+    if (angle < -45.0f) angle = -45.0f;
+
+    if (!(action == 0 || action == 1 || action == 2 || action == 3 || action == 4 || action == 9))
+        action = 0;
 
     // emergency 상태인데 사람/자동차가 사라졌으면 자동 복귀
     if (driveMode == MODE_EMERGENCY && class_ != 3 && class_ != 4)

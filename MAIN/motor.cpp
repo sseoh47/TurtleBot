@@ -5,7 +5,7 @@
 #include <Arduino.h>
 
 // #define DXL_SERIAL Serial   // 다이나믹실드
-#define DXL_SERIAL Serial3
+#define DXL_SERIAL Serial
 
 Dynamixel2Arduino dxl(DXL_SERIAL, DXL_DIR_PIN);
 
@@ -47,6 +47,7 @@ void stopMotors()
     setWheelRPM(0,0);
 }
 
+//조향각 기반 차동 구동 함수
 void applyAngleDrive(float angleDeg,float speedScale,float bias)
 {
     float angle = clampf(angleDeg, -ANGLE_LIMIT_DEG, ANGLE_LIMIT_DEG);
