@@ -12,6 +12,7 @@ static RoutineState routine =
 
 // ================= action 2 회전 상태 =================
 static bool rotateActionActive = false;
+static bool rotateActionDone = false;
 static unsigned long rotateActionStart = 0;
 static const unsigned long ROTATE_90_MS = 2000;   // 실차 튜닝 필요
 
@@ -69,7 +70,7 @@ bool isRoutineActive()
 // ================= 루틴 시작 =================
 void startRoutine(TimedAction* r, int length)
 {
-    if (driveMode != MODE_MANUAL)
+    if ((driveMode != MODE_MANUAL ) && (driveMode != MODE_LOGISTICIn))
         return;
 
     routine.active = true;
@@ -142,6 +143,12 @@ void handleSpecialTarget(int classId, float angle, int action)
         startRoutine(logisticsRoutineOut, logisticsRoutineOutLength);
     }
 
+    if (action != 2)
+    {
+        rotateActionActive = false;
+        rotateActionDone = false;
+    }
+
     switch (action)
     {
         case 1:
@@ -152,21 +159,29 @@ void handleSpecialTarget(int classId, float angle, int action)
         case 2:
             // action2 : 좌측 90도 회전(시간 기반)
             // 정지 + 90도 + 서행직진(angle=0)
-            if (!rotateActionActive)
+            if (!rotateActionActive && !rotateActionDone)
             {
                 rotateActionActive = true;
                 rotateActionStart = millis();
                 executeBaseAction(ACT_STOP, 0.0f);
             }
-            if (millis() - rotateActionStart < ROTATE_90_MS) // ROTATE_90_MS==2000
+            if (rotateActionActive)
             {
-                executeBaseAction(ACT_ROTATE_L, 0.0f);
+                if (millis() - rotateActionStart < ROTATE_90_MS) // ROTATE_90_MS==2000
+                {
+                    executeBaseAction(ACT_ROTATE_L, 0.0f);
+                }
+                else if (millis() - rotateActionStart < ROTATE_90_MS+500) // ROTATE_90_MS==2500 -> 약 500ms동안 정지
+                {
+                    executeBaseAction(ACT_STOP, 0.0f);
+                }
+                else
+                {
+                    rotateActionActive = false;
+                    rotateActionDone = true;
+                }
             }
-            else if (millis() - rotateActionStart < ROTATE_90_MS+500) // ROTATE_90_MS==2500 -> 약 500ms동안 정지
-            {
-                executeBaseAction(ACT_STOP, 0.0f);
-            }
-            else
+            else if (rotateActionDone)
             {
                 rotateActionActive = false;
                 executeBaseAction(ACT_SLOW, 0);
