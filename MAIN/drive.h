@@ -10,7 +10,8 @@ enum BaseAction
     ACT_FORWARD,
     ACT_LEFT,
     ACT_RIGHT,
-    ACT_ROTATE,
+    ACT_ROTATE_L,
+    ACT_ROTATE_R
     ACT_REVERSE,
     ACT_STOP,
     ACT_SLOW

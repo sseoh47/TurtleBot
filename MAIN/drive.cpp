@@ -26,14 +26,18 @@ void executeBaseAction(BaseAction act, float angle)
             break;
 
         case ACT_LEFT:
-            applyAngleDrive(angle - 20.0f, 1.0f, 0.0f);
+            applyAngleDrive(angle, 1.0f, 0.0f);
             break;
 
         case ACT_RIGHT:
-            applyAngleDrive(angle + 20.0f, 1.0f, 0.0f);
+            applyAngleDrive(angle, 1.0f, 0.0f);
             break;
 
-        case ACT_ROTATE:
+        case ACT_ROTATE_L:
+            setWheelRPM(-30.0f, 30.0f);
+            break;
+
+        case ACT_ROTATE_R:
             setWheelRPM(30.0f, -30.0f);
             break;
 

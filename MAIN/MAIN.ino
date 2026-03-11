@@ -1,6 +1,7 @@
 #include "communication.h"
 #include "drive.h"
 #include "motor.h"
+
 //테스트용 주서억~
 int class_ = 0;
 float angle = 0.0f;
@@ -36,9 +37,6 @@ void loop()
     if (class_ < 0 || class_ > 9)
         class_ = 0;
 
-    if (angle > 45.0f) angle = 45.0f;
-    if (angle < -45.0f) angle = -45.0f;
-
     if (!(action == 0 || action == 1 || action == 2 || action == 3 || action == 4 || action == 9))
         action = 0;
 
@@ -73,18 +71,14 @@ void loop()
             break;
 
         case 6:
+        case 8:
             // 임시: 좌회전
-            handleLeftTurn(angle);
+            handleLeftTurn(-30);
             break;
 
         case 7:
             // 임시: 직진
             handleStraight(angle);
-            break;
-
-        case 8:
-            // 임시: 좌회전
-            handleLeftTurn(angle);
             break;
 
         case 9:
