@@ -63,6 +63,7 @@ void loop()
         handleTimedAction(currentAction, currentAngle, actionDuration);
         return;
     }
+    
     if ((driveMode == MODE_LOGISTICIn) && (class_==9)){
         handleResume();
         return;
