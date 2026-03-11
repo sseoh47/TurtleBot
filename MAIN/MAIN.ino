@@ -2,7 +2,6 @@
 #include "drive.h"
 #include "motor.h"
 
-//테스트용 주서억~
 int class_ = 0;
 float angle = 0.0f;
 int action = 0;
@@ -34,10 +33,10 @@ void loop()
     }
 
     // 입력값 필터링
-    if (class_ < 0 || class_ > 9)
+    if (class_ < 0 || class_ > 10)
         class_ = 0;
 
-    if (!(action == 0 || action == 1 || action == 2 || action == 3 || action == 4 || action == 9))
+    if (!(action == 0 || action == 1 || action == 2 || action == 3 || action == 9))
         action = 0;
 
 
@@ -64,6 +63,10 @@ void loop()
         handleTimedAction(currentAction, currentAngle, actionDuration);
         return;
     }
+    if ((driveMode == MODE_LOGISTICIn) && (class_==9)){
+        handleResume();
+        return;
+    }
 
     switch (class_)
     {
@@ -74,13 +77,14 @@ void loop()
 
         case 1:
             // 차선 인식 -> angle 반영 직진 보정
-            handleLineFollow(angle);
-            // 수정 : action 추가
+            if (action) handleSpecialTarget(class_, angle, action);
+            else handleLineFollow(angle);
             break;
 
         case 2:
         case 5:
-            // 물류 / 주차 표기 -> action 기반 특수 처리
+        case 10:
+            // 물류 / 물류x / 주차 표기 -> action 기반 특수 처리
             handleSpecialTarget(class_, angle, action);
             break;
 
@@ -101,11 +105,6 @@ void loop()
             // 임시: 직진(3초)
             handleTimedAction(ACT_FORWARD, angle, 3000);
             // handleStraight(angle);
-            break;
-
-        case 9:
-            // 출발 신호
-            handleResume();
             break;
 
         default:

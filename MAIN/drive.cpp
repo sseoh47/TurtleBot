@@ -162,11 +162,8 @@ void handleEmergencyStop()
 // =========================
 void handleResume()
 {
-    if (driveMode == MODE_EMERGENCY)
-    {
-        driveMode = MODE_MANUAL;
-        executeBaseAction(ACT_FORWARD, heldDriveAngle);
-    }
+    startRoutine(logisticsRoutineOut, logisticsRoutineOutLength);
+    driveMode = MODE_MANUAL;
 }
 
 // =========================

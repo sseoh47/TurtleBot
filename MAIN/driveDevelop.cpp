@@ -15,21 +15,43 @@ static bool rotateActionActive = false;
 static unsigned long rotateActionStart = 0;
 static const unsigned long ROTATE_90_MS = 2000;   // 실차 튜닝 필요
 
-// ================= 물류 루틴 =================
-TimedAction logisticsRoutine[] =
+// ================= 물류 루틴 IN =================
+TimedAction logisticsRoutineIn[] =
 {
     {ACT_FORWARD, 0.0f, 1500},
     {ACT_LEFT,    0.0f, 1200},
     {ACT_STOP,    0.0f,    0}
 };
 
-const int logisticsRoutineLength =
-    sizeof(logisticsRoutine) / sizeof(TimedAction);
+const int logisticsRoutineInLength =
+    sizeof(logisticsRoutineIn) / sizeof(TimedAction);
+
+// ================= 물류 루틴 OUT =================
+TimedAction logisticsRoutineOut[] =
+{
+    {ACT_FORWARD, 0.0f, 1500},
+    {ACT_LEFT,    0.0f, 1200},
+    {ACT_STOP,    0.0f,    0}
+};
+
+const int logisticsRoutineOutLength =
+    sizeof(logisticsRoutineOut) / sizeof(TimedAction);
+
+// ================= 물류X PASS 루틴 =================
+TimedAction logisticsRoutinePASS[] =
+{
+    {ACT_FORWARD, 0.0f, 1500},
+    {ACT_LEFT,    0.0f, 1200},
+    {ACT_STOP,    0.0f,    0}
+};
+
+const int logisticsRoutinePASSLength =
+    sizeof(logisticsRoutinePASS) / sizeof(TimedAction);
 
 // ================= 주차 루틴 =================
 TimedAction parkingRoutine[] =
 {
-    {ACT_ROTATE_L,  0.0f, 1500},
+    {ACT_ROTATE_R,  0.0f, 1500},
     {ACT_FORWARD, 0.0f, 1000},
     {ACT_REVERSE, 0.0f, 1200},
     {ACT_STOP,    0.0f,    0}
@@ -106,7 +128,7 @@ void updateRoutine()
     }
 }
 
-// ================= class 2,5 특수 처리 =================
+// ================= class 1,2,5,10 특수 처리 =================
 void handleSpecialTarget(int classId, float angle, int action)
 {
     if (driveMode == MODE_EMERGENCY)
@@ -115,6 +137,10 @@ void handleSpecialTarget(int classId, float angle, int action)
     // 루틴 중이면 일반 특수 처리 무시
     if (driveMode == MODE_ROUTINE)
         return;
+
+    if (classId == 9){
+        startRoutine(logisticsRoutineOut, logisticsRoutineOutLength);
+    }
 
     switch (action)
     {
@@ -130,39 +156,39 @@ void handleSpecialTarget(int classId, float angle, int action)
             {
                 rotateActionActive = true;
                 rotateActionStart = millis();
+                executeBaseAction(ACT_STOP, 0.0f);
             }
-
-            if (millis() - rotateActionStart < ROTATE_90_MS)
+            if (millis() - rotateActionStart < ROTATE_90_MS) // ROTATE_90_MS==2000
             {
                 executeBaseAction(ACT_ROTATE_L, 0.0f);
+            }
+            else if (millis() - rotateActionStart < ROTATE_90_MS+500) // ROTATE_90_MS==2500 -> 약 500ms동안 정지
+            {
+                executeBaseAction(ACT_STOP, 0.0f);
             }
             else
             {
                 rotateActionActive = false;
-                executeBaseAction(ACT_STOP, 0.0f);
+                executeBaseAction(ACT_SLOW, 0);
             }
             break;
 
         case 3:
+        case 9:
             // action3 : 정면 근접 정지
             executeBaseAction(ACT_STOP, 0.0f);
-            break;
-
-        case 4:
-            // action4 : 하드코딩된 루틴 수행
             if (classId == 2)
-                startRoutine(logisticsRoutine, logisticsRoutineLength);
+            {
+                startRoutine(logisticsRoutineIn, logisticsRoutineInLength);
+                driveMode = MODE_LOGISTICIn;
+            }
             else if (classId == 5)
                 startRoutine(parkingRoutine, parkingRoutineLength);
-            break;
-
-        case 9:
-            // 현재 비워둠
+            else if (classId == 10)
+                startRoutine(logisticsRoutinePASS, logisticsRoutinePASSLength);
             break;
 
         default:
-            // 특수 action 없으면 기본 접근 주행
-            executeBaseAction(ACT_FORWARD, angle);
             break;
     }
 }
