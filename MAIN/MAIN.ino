@@ -34,16 +34,21 @@ void loop()
     }
 
     // 입력값 필터링
-    if (class_ < 0 || class_ > 9)
+    if (class_ < 0 || class_ > 10)
         class_ = 0;
 
-    if (!(action == 0 || action == 1 || action == 2 || action == 3 || action == 4 || action == 9))
+    if (!(action == 0 || action == 1 || action == 2 || action == 3 || action == 9))
         action = 0;
 
     // emergency 상태인데 사람/자동차가 사라졌으면 자동 복귀
     if (driveMode == MODE_EMERGENCY && class_ != 3 && class_ != 4)
     {
         driveMode = MODE_MANUAL;
+    }
+
+    if ((driveMode == MODE_LOGISTICIn) && (class_==9)){
+        handleResume();
+        return;
     }
 
     switch (class_)
@@ -55,12 +60,14 @@ void loop()
 
         case 1:
             // 차선 인식 -> angle 반영 직진 보정
-            handleLineFollow(angle);
+            if (action) handleSpecialTarget(class_, angle, action);
+            else handleLineFollow(angle);
             break;
 
         case 2:
         case 5:
-            // 물류 / 주차 표기 -> action 기반 특수 처리
+        case 10:
+            // 물류 / 물류x / 주차 표기 -> action 기반 특수 처리
             handleSpecialTarget(class_, angle, action);
             break;
 
@@ -79,11 +86,6 @@ void loop()
         case 7:
             // 임시: 직진
             handleStraight(angle);
-            break;
-
-        case 9:
-            // 출발 신호
-            handleResume();
             break;
 
         default:

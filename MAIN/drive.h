@@ -11,7 +11,7 @@ enum BaseAction
     ACT_LEFT,
     ACT_RIGHT,
     ACT_ROTATE_L,
-    ACT_ROTATE_R
+    ACT_ROTATE_R,
     ACT_REVERSE,
     ACT_STOP,
     ACT_SLOW
@@ -22,7 +22,8 @@ enum DriveMode
 {
     MODE_MANUAL,
     MODE_ROUTINE,
-    MODE_EMERGENCY
+    MODE_EMERGENCY,
+    MODE_LOGISTICIn
 };
 
 // ================= 루틴 동작 구조 =================
@@ -46,11 +47,16 @@ struct RoutineState
 // ================= 전역 =================
 extern DriveMode driveMode;
 
-extern TimedAction logisticsRoutine[];
+extern TimedAction logisticsRoutineIn[];
+extern TimedAction logisticsRoutineOut[];
+extern TimedAction logisticsRoutinePASS[];
 extern TimedAction parkingRoutine[];
 
-extern const int logisticsRoutineLength;
+extern const int logisticsRoutineInLength;
+extern const int logisticsRoutineOutLength;
+extern const int logisticsRoutinePASSLength;
 extern const int parkingRoutineLength;
+
 
 // ================= 초기화 =================
 void initDrive();
