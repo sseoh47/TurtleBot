@@ -9,7 +9,10 @@
 #define DXL_PROTOCOL_VERSION 2.0
 
 // #define DXL_DIR_PIN 2 // 다이나믹셀실드 방향핀
-#define DXL_DIR_PIN 84 // OpenCR 방향핀
+//#define DXL_DIR_PIN 84 // OpenCR 방향핀
+
+// Arduino UNO + Dynamixel Shield
+#define DXL_DIR_PIN 2
 
 #define LEFT_ID  1
 #define RIGHT_ID 2
