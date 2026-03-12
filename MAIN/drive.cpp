@@ -17,20 +17,20 @@ void initDrive()
 // =========================
 // 실제 모터 명령 실행
 // =========================
-void executeBaseAction(BaseAction act, float angle)
+void executeBaseAction(BaseAction act, float angle, float speedOffset)
 {
     switch (act)
     {
         case ACT_FORWARD:
-            applyAngleDrive(angle, 1.0f, 0.0f);
+            applyAngleDrive(angle, 1.0f, 0.0f, speedOffset);
             break;
 
         case ACT_LEFT:
-            applyAngleDrive(angle, 1.0f, 0.0f);
+            applyAngleDrive(angle, 1.0f, 0.0f, speedOffset);
             break;
 
         case ACT_RIGHT:
-            applyAngleDrive(angle, 1.0f, 0.0f);
+            applyAngleDrive(angle, 1.0f, 0.0f, speedOffset);
             break;
 
         case ACT_ROTATE_L:
@@ -50,7 +50,7 @@ void executeBaseAction(BaseAction act, float angle)
             break;
 
         case ACT_SLOW:
-            applyAngleDrive(angle, 0.5f, 0.0f);
+            applyAngleDrive(angle, 0.5f, 0.0f, speedOffset);
             break;
     }
 }
@@ -139,7 +139,6 @@ void handleEmergencyStop()
 void handleResume()
 {
     startRoutine(logisticsRoutineOut, logisticsRoutineOutLength);
-    driveMode = MODE_MANUAL;
 }
 
 // =========================
@@ -147,7 +146,7 @@ void handleResume()
 // =========================
 void handleDefault()
 {
-    if (driveMode == MODE_EMERGENCY || driveMode == MODE_ROUTINE)
+    if (driveMode == MODE_EMERGENCY || driveMode == MODE_ROUTINE || driveMode == MODE_LOGISTICIn)
         return;
 
     executeBaseAction(ACT_FORWARD, heldDriveAngle);

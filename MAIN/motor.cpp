@@ -48,11 +48,11 @@ void stopMotors()
 }
 
 //조향각 기반 차동 구동 함수
-void applyAngleDrive(float angleDeg,float speedScale,float bias)
+void applyAngleDrive(float angleDeg,float speedScale,float bias, float speedOffset)
 {
     float angle = clampf(angleDeg, -ANGLE_LIMIT_DEG, ANGLE_LIMIT_DEG);
 
-    float base = BASE_RPM * speedScale;
+    float base = (BASE_RPM + speedOffset) * speedScale;
     float diff = angle * TURN_GAIN_RPM_PER_DEG + bias;
 
     float left  = base + diff;

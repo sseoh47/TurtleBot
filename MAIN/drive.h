@@ -32,6 +32,7 @@ struct TimedAction
     BaseAction action;
     float angle;
     unsigned long duration;
+    float speedOffset;
 };
 
 // ================= 루틴 상태 =================
@@ -82,7 +83,7 @@ void handleDefault();
 void handleSpecialTarget(int classId, float angle, int action);
 
 // ================= 공통 실행 =================
-void executeBaseAction(BaseAction act, float angle);
+void executeBaseAction(BaseAction act, float angle, float speedOffset = 0.0f);
 
 // ================= 루틴 관련 =================
 void startRoutine(TimedAction* r, int length);

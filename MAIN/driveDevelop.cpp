@@ -19,9 +19,10 @@ static const unsigned long ROTATE_90_MS = 2000;   // 실차 튜닝 필요
 // ================= 물류 루틴 IN =================
 TimedAction logisticsRoutineIn[] =
 {
-    {ACT_ROTATE_R, 0.0f, 1500},
-    {ACT_FORWARD, 0.0f, 1500},
-    {ACT_LEFT,    0.0f, 1200},
+    {ACT_ROTATE_R, 0.0f, 2000, 0.0f},
+    {ACT_FORWARD, 0.0f, 2000, -10.0f},
+    {ACT_ROTATE_R, 0.0f, 2000, 0.0f},
+    {ACT_REVERSE, 0.0f, 2000, -10.0f},
     {ACT_STOP,    0.0f,    0}
 };
 
@@ -31,8 +32,8 @@ const int logisticsRoutineInLength =
 // ================= 물류 루틴 OUT =================
 TimedAction logisticsRoutineOut[] =
 {
-    {ACT_FORWARD, 0.0f, 1500},
-    {ACT_LEFT,    0.0f, 1200},
+    {ACT_FORWARD, 0.0f, 3000, -10.0f},
+    {ACT_ROTATE_L, 0.0f, 2000, 0.0f},
     {ACT_STOP,    0.0f,    0}
 };
 
@@ -42,8 +43,8 @@ const int logisticsRoutineOutLength =
 // ================= 물류X PASS 루틴 =================
 TimedAction logisticsRoutinePASS[] =
 {
-    {ACT_FORWARD, 0.0f, 1500},
-    {ACT_LEFT,    0.0f, 1200},
+    {ACT_REVERSE, 0.0f, 1500, -10.0f},
+    {ACT_ROTATE_R, 0.0f, 2000, 0.0f},
     {ACT_STOP,    0.0f,    0}
 };
 
@@ -53,9 +54,10 @@ const int logisticsRoutinePASSLength =
 // ================= 주차 루틴 =================
 TimedAction parkingRoutine[] =
 {
-    {ACT_ROTATE_R,  0.0f, 1500},
-    {ACT_FORWARD, 0.0f, 1000},
-    {ACT_REVERSE, 0.0f, 1200},
+    {ACT_ROTATE_R, 0.0f, 2000, 0.0f},
+    {ACT_FORWARD, 0.0f, 2000, -10.0f},
+    {ACT_ROTATE_R, 0.0f, 2000, 0.0f},
+    {ACT_REVERSE, 0.0f, 2000, -10.0f},
     {ACT_STOP,    0.0f,    0}
 };
 
@@ -126,7 +128,7 @@ void updateRoutine()
     unsigned long now = millis();
     TimedAction &act = routine.routine[routine.index];
 
-    executeBaseAction(act.action, act.angle);
+    executeBaseAction(act.action, act.angle, act.speedOffset);
 
     // duration 0이면 종료 단계
     if (act.duration == 0)

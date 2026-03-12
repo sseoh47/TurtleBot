@@ -3,7 +3,7 @@
 
 void initMotor();
 
-void applyAngleDrive(float angleDeg,float speedScale,float bias);
+void applyAngleDrive(float angleDeg,float speedScale,float bias, float speedOffset);
 void setWheelRPM(float left, float right);
 void stopMotors();
 
