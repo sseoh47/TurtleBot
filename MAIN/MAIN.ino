@@ -64,10 +64,10 @@ void loop()
         return;
     }
     
-    if ((driveMode == MODE_LOGISTICIn) && (class_==9)){
-        handleResume();
-        return;
-    }
+    // if ((driveMode == MODE_LOGISTICIn) && (class_==9)){
+    //     handleResume();
+    //     return;
+    // }
 
     switch (class_)
     {
@@ -89,12 +89,6 @@ void loop()
             handleSpecialTarget(class_, angle, action);
             break;
 
-        // case 3:
-        // case 4:
-        //     // 사람 / 자동차 -> 즉시 정지
-        //     handleEmergencyStop();
-        //     break;
-
         case 6:
         case 8:
             // 임시: 좌회전(2초)
@@ -106,6 +100,13 @@ void loop()
             // 임시: 직진(3초)
             handleTimedAction(ACT_FORWARD, angle, 3000);
             // handleStraight(angle);
+            break;
+
+        case 9:
+            if (driveMode == MODE_LOGISTICIn)
+            {
+                startRoutine(logisticsRoutineOut, logisticsRoutineOutLength);
+            }
             break;
 
         default:

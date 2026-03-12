@@ -19,6 +19,7 @@ static const unsigned long ROTATE_90_MS = 2000;   // 실차 튜닝 필요
 // ================= 물류 루틴 IN =================
 TimedAction logisticsRoutineIn[] =
 {
+    {ACT_ROTATE_R, 0.0f, 1500},
     {ACT_FORWARD, 0.0f, 1500},
     {ACT_LEFT,    0.0f, 1200},
     {ACT_STOP,    0.0f,    0}
@@ -80,6 +81,7 @@ void startRoutine(TimedAction* r, int length)
     routine.length = length;
 
     driveMode = MODE_ROUTINE;
+    
 }
 
 // ================= 루틴 취소 =================
@@ -93,8 +95,7 @@ void cancelRoutine()
 
     rotateActionActive = false;
 
-    if (driveMode == MODE_ROUTINE)
-        driveMode = MODE_MANUAL;
+    //driveMode = MODE_MANUAL;
 }
 
 // ================= 루틴 갱신 =================
@@ -105,9 +106,21 @@ void updateRoutine()
 
     if (routine.index >= routine.length)
     {
+        TimedAction* finished = routine.routine;
+
         stopMotors();
         cancelRoutine();
+
+        if (finished == logisticsRoutineIn)
+            driveMode = MODE_LOGISTICIn;   // IN 끝났으니 대기 모드
+        else
+            driveMode = MODE_MANUAL;       // OUT / PASS / PARKING 끝났으니 일반 모드
+
         return;
+
+        // stopMotors();
+        // cancelRoutine();
+        // return;
     }
 
     unsigned long now = millis();
@@ -118,8 +131,20 @@ void updateRoutine()
     // duration 0이면 종료 단계
     if (act.duration == 0)
     {
+        TimedAction* finished = routine.routine;
+
+        stopMotors();
         cancelRoutine();
+
+        if (finished == logisticsRoutineIn)
+            driveMode = MODE_LOGISTICIn;
+        else
+            driveMode = MODE_MANUAL;
+
         return;
+        
+        // cancelRoutine();
+        // return;
     }
 
     if (now - routine.start >= act.duration)
@@ -136,12 +161,8 @@ void handleSpecialTarget(int classId, float angle, int action)
         return;
 
     // 루틴 중이면 일반 특수 처리 무시
-    if (driveMode == MODE_ROUTINE)
+    if (driveMode == MODE_ROUTINE || driveMode == MODE_LOGISTICIn )
         return;
-
-    if (classId == 9){
-        startRoutine(logisticsRoutineOut, logisticsRoutineOutLength);
-    }
 
     if (action != 2)
     {
@@ -194,8 +215,8 @@ void handleSpecialTarget(int classId, float angle, int action)
             executeBaseAction(ACT_STOP, 0.0f);
             if (classId == 2)
             {
+                //driveMode = MODE_LOGISTICIn;
                 startRoutine(logisticsRoutineIn, logisticsRoutineInLength);
-                driveMode = MODE_LOGISTICIn;
             }
             else if (classId == 5)
                 startRoutine(parkingRoutine, parkingRoutineLength);
