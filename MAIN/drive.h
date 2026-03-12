@@ -1,3 +1,6 @@
+#include <Dynamixel2Arduino.h>
+#include <actuator.h>
+
 #ifndef DRIVE_H
 #define DRIVE_H
 
