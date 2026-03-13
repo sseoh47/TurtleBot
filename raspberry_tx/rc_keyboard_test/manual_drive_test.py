@@ -9,7 +9,7 @@ from dataclasses import dataclass
 # =========================================================
 SERIAL_PORT = "/dev/serial0"  # 예: /dev/ttyUSB0, /dev/ttyACM0
 BAUDRATE = 57600
-SEND_HZ = 30  # 초당 전송 횟수
+SEND_HZ = 10  # 초당 전송 횟수
 STEER_ANGLE = 18.0  # 좌/우 조향 테스트용 angle
 FORWARD_ANGLE = 0.0
 
@@ -186,7 +186,7 @@ def draw_ui(stdscr, cmd: CarCommand, port_open: bool, last_packet: str):
 def main(stdscr):
     curses.curs_set(0)
     stdscr.nodelay(True)
-    stdscr.timeout(20)
+    
 
     ser = None
     port_open = False
