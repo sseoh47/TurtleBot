@@ -5,7 +5,7 @@
 
 #if defined(ARDUINO_AVR_UNO) || defined(ARDUINO_AVR_MEGA2560)
 #include <SoftwareSerial.h>
-SoftwareSerial classSoftSerial(7,8);
+SoftwareSerial classSoftSerial(7,8); //RX TX
 #define CLASS_SERIAL classSoftSerial
 #else
 #define CLASS_SERIAL Serial

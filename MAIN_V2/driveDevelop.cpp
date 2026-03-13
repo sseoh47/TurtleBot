@@ -11,10 +11,12 @@ static RoutineState routine =
 };
 
 // ================= action 2 회전 상태 =================
-static bool rotateActionActive = false;
-static bool rotateActionDone = false;
-static unsigned long rotateActionStart = 0;
-static const unsigned long ROTATE_90_MS = 2000;   // 실차 튜닝 필요
+// static bool rotateActionActive = false;
+// static bool rotateActionDone = false;
+// static unsigned long rotateActionStart = 0;
+static bool slowActionActive = false;
+// static unsigned long slowActionStart = 0;
+// static const unsigned long ROTATE_90_MS = 2000;   // 실차 튜닝 필요
 
 // ================= 물류 루틴 IN =================
 TimedAction logisticsRoutineIn[] =
@@ -95,7 +97,7 @@ void cancelRoutine()
     routine.length = 0;
     routine.routine = nullptr;
 
-    rotateActionActive = false;
+    slowActionActive = false;
 
     //driveMode = MODE_MANUAL;
 }
@@ -166,11 +168,11 @@ void handleSpecialTarget(int classId, float angle, int action)
     if (driveMode == MODE_ROUTINE || driveMode == MODE_LOGISTICIn )
         return;
 
-    if (action != 2)
-    {
-        rotateActionActive = false;
-        rotateActionDone = false;
-    }
+    // if (action != 2)
+    // {
+    //     slowActionActive = false;
+    //     slowActionDone = false;
+    // }
 
     switch (action)
     {
@@ -182,38 +184,50 @@ void handleSpecialTarget(int classId, float angle, int action)
         case 2:
             // action2 : 좌측 90도 회전(시간 기반)
             // 정지 + 90도 + 서행직진(angle=0)
-            if (!rotateActionActive && !rotateActionDone)
+            // if (!rotateActionActive && !rotateActionDone)
+            // {
+            //     rotateActionActive = true;
+            //     rotateActionStart = millis();
+            //     executeBaseAction(ACT_STOP, 0.0f);
+            // }
+            // if (rotateActionActive)
+            // {
+                // if (millis() - rotateActionStart < ROTATE_90_MS) // ROTATE_90_MS==2000
+                // {
+            executeBaseAction(ACT_ROTATE_L, 0.0f);
+                // }
+                // else if (millis() - rotateActionStart < ROTATE_90_MS+500) // ROTATE_90_MS==2500 -> 약 500ms동안 정지
+                // {
+                //     executeBaseAction(ACT_STOP, 0.0f);
+                // }
+            //     else
+            //     {
+            //         rotateActionActive = false;
+            //         rotateActionDone = true;
+            //     }
+            // }
+            // else if (rotateActionDone)
+            // {
+            //     rotateActionActive = false;
+            //     executeBaseAction(ACT_SLOW, 0);
+            // }
+            break;
+        case 3:
+            if (!slowActionActive)
             {
-                rotateActionActive = true;
-                rotateActionStart = millis();
+                slowActionActive = true;
                 executeBaseAction(ACT_STOP, 0.0f);
             }
-            if (rotateActionActive)
+            if (slowActionActive)
             {
-                if (millis() - rotateActionStart < ROTATE_90_MS) // ROTATE_90_MS==2000
-                {
-                    executeBaseAction(ACT_ROTATE_L, 0.0f);
-                }
-                else if (millis() - rotateActionStart < ROTATE_90_MS+500) // ROTATE_90_MS==2500 -> 약 500ms동안 정지
-                {
-                    executeBaseAction(ACT_STOP, 0.0f);
-                }
-                else
-                {
-                    rotateActionActive = false;
-                    rotateActionDone = true;
-                }
+                executeBaseAction(ACT_SLOW, angle);
+                break;
             }
-            else if (rotateActionDone)
-            {
-                rotateActionActive = false;
-                executeBaseAction(ACT_SLOW, 0);
-            }
-            break;
 
-        case 3:
+        case 4:
         case 9:
-            // action3 : 정면 근접 정지
+            slowActionActive = false;
+            // action4 : 정면 근접 정지
             executeBaseAction(ACT_STOP, 0.0f);
             if (classId == 2)
             {
