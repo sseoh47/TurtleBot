@@ -9,7 +9,7 @@ from dataclasses import dataclass
 # =========================================================
 SERIAL_PORT = "/dev/serial0"  # 예: /dev/ttyUSB0, /dev/ttyACM0
 BAUDRATE = 57600
-SEND_HZ = 10  # 초당 전송 횟수
+SEND_HZ = 30  # 초당 전송 횟수
 STEER_ANGLE = 18.0  # 좌/우 조향 테스트용 angle
 FORWARD_ANGLE = 0.0
 
@@ -30,14 +30,14 @@ class CarCommand:
 # =========================================================
 def send_packet(ser: serial.Serial, cmd: CarCommand):
     """
-    현재 MCU 파서 기준:
-        class,angle,action\\n
+    MCU 파서 기준:
+        class,angle,action\n
     예:
         1,-12.3,0
     """
+
     packet = f"{cmd.class_id},{cmd.angle:.1f},{cmd.action}\n"
     ser.write(packet.encode("utf-8"))
-    ser.flush()
 
 
 # =========================================================

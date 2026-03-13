@@ -15,6 +15,8 @@ void setup()
     initCommunication();
     initMotor();
     initDrive();
+
+    pinMode(RX_LED, OUTPUT);
 }
 
 void loop()
@@ -23,14 +25,15 @@ void loop()
     if (readCommand(class_, angle, action))
     {
         lastRxTime = millis();
+        digitalWrite(RX_LED, !digitalRead(RX_LED));
     }
 
     // 통신 끊김 방어
-    if (millis() - lastRxTime > RX_TIMEOUT)
-    {
-        stopMotors();
-        return;
-    }
+    // if (millis() - lastRxTime > RX_TIMEOUT)
+    // {
+    //     stopMotors();
+    //     return;
+    // }
 
     // 입력값 필터링
     if (class_ < 0 || class_ > 10)

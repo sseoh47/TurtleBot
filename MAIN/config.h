@@ -22,4 +22,7 @@
 #define TURN_GAIN_RPM_PER_DEG 0.6f
 #define ANGLE_LIMIT_DEG 30.0f
 
+
+#define RX_LED 4
+
 #endif
