@@ -15,7 +15,7 @@ static RoutineState routine =
 // static bool rotateActionDone = false;
 // static unsigned long rotateActionStart = 0;
 static bool slowActionActive = false;
-static unsigned long slowActionStart = 0;
+// static unsigned long slowActionStart = 0;
 // static const unsigned long ROTATE_90_MS = 2000;   // 실차 튜닝 필요
 
 // ================= 물류 루틴 IN =================
@@ -168,11 +168,11 @@ void handleSpecialTarget(int classId, float angle, int action)
     if (driveMode == MODE_ROUTINE || driveMode == MODE_LOGISTICIn )
         return;
 
-    if (action != 2)
-    {
-        rotateActionActive = false;
-        rotateActionDone = false;
-    }
+    // if (action != 2)
+    // {
+    //     slowActionActive = false;
+    //     slowActionDone = false;
+    // }
 
     switch (action)
     {
@@ -216,7 +216,6 @@ void handleSpecialTarget(int classId, float angle, int action)
             if (!slowActionActive)
             {
                 slowActionActive = true;
-                slowActionStart = millis();
                 executeBaseAction(ACT_STOP, 0.0f);
             }
             if (slowActionActive)
