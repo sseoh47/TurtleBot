@@ -23,21 +23,16 @@ void loop()
         lastRxTime = millis();
     }
 
-    if (millis() - lastRxTime > RX_TIMEOUT)
-    {
-        stopMotors();
-        return;
-    }
-
     if (class_ < 0 || class_ > 10)
         class_ = 0;
 
-    if (!(action == 0 || action == 1 || action == 2 || action == 3 || action == 9))
+    if (!(action == 0 || action == 1 || action == 2 || action == 3 || action == 4 || action == 9))
         action = 0;
 
     if (class_ == 3 || class_ == 4)
     {
-        handleEmergencyStop();
+        //handleEmergencyStop();
+        executeBaseAction(ACT_STOP, 0);
         return;
     }
 
@@ -55,14 +50,13 @@ void loop()
     switch (class_)
     {
         case 0:
-            handleLineLost();
+            if (action) handleSpecialTarget(class_, angle, action);
+            else handleLineLost();
             break;
 
         case 1:
-            if (action)
-                handleSpecialTarget(class_, angle, action);
-            else
-                handleLineFollow(angle);
+            if (action) handleSpecialTarget(class_, angle, action);
+            else handleLineFollow(angle);
             break;
 
         case 2:
@@ -77,7 +71,7 @@ void loop()
             break;
 
         case 7:
-            handleTimedAction(ACT_FORWARD, angle, 3000);
+            handleTimedAction(ACT_FORWARD, 0, 3000);
             break;
 
         case 9:
