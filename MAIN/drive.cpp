@@ -124,6 +124,7 @@ void emergencyStop()
 {
     stopMotors();
     cancelRoutine();
+    timedActionActive = false;
     driveMode = MODE_EMERGENCY;
 }
 
