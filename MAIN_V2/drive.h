@@ -68,8 +68,14 @@ extern unsigned long actionDuration;
 extern BaseAction currentAction;
 extern float currentAngle;
 
+extern bool startupRoutineActive;
+extern uint8_t startupStep;
+extern unsigned long startupStepStart;
+
 // ================= 초기화 =================
 void initDrive();
+
+void updateStartupRoutine();
 
 // ================= 일반 주행 처리 =================
 void handleLineLost();

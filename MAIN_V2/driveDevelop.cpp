@@ -1,5 +1,57 @@
 #include "drive.h"
 
+
+// ================= setup 시작 루틴  =================
+void updateStartupRoutine()
+{
+    unsigned long now = millis();
+
+    switch (startupStep)
+    {
+        case 0:
+            executeBaseAction(ACT_FORWARD, 0);
+            if (now - startupStepStart >= 1500)
+            {
+                startupStep = 1;
+                startupStepStart = now;
+            }
+            break;
+
+        case 1:
+            executeBaseAction(ACT_LEFT, -30);
+            if (now - startupStepStart >= 2000)
+            {
+                startupStep = 2;
+                startupStepStart = now;
+            }
+            break;
+
+        case 2:
+            executeBaseAction(ACT_FORWARD, 0);
+            if (now - startupStepStart >= 2500)
+            {
+                startupStep = 3;
+                startupStepStart = now;
+            }
+            break;
+
+        case 3:
+            executeBaseAction(ACT_LEFT, -30);
+            if (now - startupStepStart >= 2000)
+            {
+                executeBaseAction(ACT_STOP, 0);
+                startupRoutineActive = false;
+            }
+            break;
+
+        // default:
+        //     executeBaseAction(ACT_STOP, 0);
+        //     startupRoutineActive = false;
+        //     break;
+    }
+}
+
+
 // ================= 루틴 상태 =================
 static RoutineState routine =
 {
@@ -21,10 +73,10 @@ static bool slowActionActive = false;
 // ================= 물류 루틴 IN =================
 TimedAction logisticsRoutineIn[] =
 {
-    {ACT_ROTATE_R, 0.0f, 2000, 0.0f},
+    {ACT_ROTATE_R, 0.0f, 2450, 0.0f},
     {ACT_FORWARD, 0.0f, 2000, -10.0f},
-    {ACT_ROTATE_R, 0.0f, 2000, 0.0f},
-    {ACT_REVERSE, 0.0f, 2000, -10.0f},
+    {ACT_ROTATE_R, 0.0f, 2450, 0.0f},
+    {ACT_REVERSE, 0.0f, 2500, -10.0f},
     {ACT_STOP,    0.0f,    0}
 };
 
@@ -35,7 +87,7 @@ const int logisticsRoutineInLength =
 TimedAction logisticsRoutineOut[] =
 {
     {ACT_FORWARD, 0.0f, 3000, -10.0f},
-    {ACT_ROTATE_L, 0.0f, 2000, 0.0f},
+    {ACT_ROTATE_L, 0.0f, 2450, 0.0f},
     {ACT_STOP,    0.0f,    0}
 };
 
@@ -46,7 +98,7 @@ const int logisticsRoutineOutLength =
 TimedAction logisticsRoutinePASS[] =
 {
     {ACT_REVERSE, 0.0f, 1500, -10.0f},
-    {ACT_ROTATE_R, 0.0f, 2000, 0.0f},
+    {ACT_ROTATE_R, 0.0f, 2450, 0.0f},
     {ACT_STOP,    0.0f,    0}
 };
 
@@ -56,9 +108,9 @@ const int logisticsRoutinePASSLength =
 // ================= 주차 루틴 =================
 TimedAction parkingRoutine[] =
 {
-    {ACT_ROTATE_R, 0.0f, 2000, 0.0f},
+    {ACT_ROTATE_R, 0.0f, 2450, 0.0f},
     {ACT_FORWARD, 0.0f, 2000, -10.0f},
-    {ACT_ROTATE_R, 0.0f, 2000, 0.0f},
+    {ACT_ROTATE_R, 0.0f, 2450, 0.0f},
     {ACT_REVERSE, 0.0f, 2000, -10.0f},
     {ACT_STOP,    0.0f,    0}
 };
@@ -217,8 +269,9 @@ void handleSpecialTarget(int classId, float angle, int action)
             {
                 slowActionActive = true;
                 executeBaseAction(ACT_STOP, 0.0f);
+                unsigned int three_now = millis();
             }
-            if (slowActionActive)
+            if (slowActionActive && (now - three_now > 1000))
             {
                 executeBaseAction(ACT_SLOW, angle);
                 break;

@@ -9,15 +9,31 @@ int action = 0;
 unsigned long lastRxTime = 0;
 const unsigned long RX_TIMEOUT = 300;
 
+bool startupRoutineActive = false;
+uint8_t startupStep = 0;
+unsigned long startupStepStart = 0;
+
+
 void setup()
 {
     initCommunication();
     initMotor();
     initDrive();
+
+    startupRoutineActive = true;
+    startupStep = 0;
+    startupStepStart = millis();
 }
 
 void loop()
 {
+    // 시작하면 한번 실행될 루틴
+    if (startupRoutineActive)
+    {
+        updateStartupRoutine();
+        return;
+    }
+
     if (readCommand(class_, angle, action))
     {
         lastRxTime = millis();

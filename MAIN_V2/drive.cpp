@@ -34,11 +34,11 @@ void executeBaseAction(BaseAction act, float angle, float speedOffset)
             break;
 
         case ACT_ROTATE_L:
-            setWheelRPM(-30.0f, 30.0f);
+            setWheelRPM(-15.0f, 15.0f);
             break;
 
         case ACT_ROTATE_R:
-            setWheelRPM(30.0f, -30.0f);
+            setWheelRPM(15.0f, -15.0f);
             break;
 
         case ACT_REVERSE:
