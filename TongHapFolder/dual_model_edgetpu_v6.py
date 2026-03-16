@@ -1212,18 +1212,27 @@ from dataclasses import dataclass
 from typing import Optional
 import subprocess
 
+import threading
+import subprocess
+import cv2
+import numpy as np
+
 
 class RPiMJPEGCamera:
     """
-    rpicam-vid를 MJPEG stdout 스트림으로 실행하고,
-    stdout에서 JPEG 프레임을 읽어 cv2 이미지로 변환한다.
+    rpicam-vid MJPEG stdout을 백그라운드 스레드에서 계속 읽고,
+    항상 최신 프레임 1장만 유지한다.
     """
 
-    def __init__(self, width=640, height=480, framerate=30):
+    def __init__(self, width=640, height=480, framerate=10):
         self.width = width
         self.height = height
         self.framerate = framerate
+
         self.buffer = bytearray()
+        self.latest_frame = None
+        self.lock = threading.Lock()
+        self.alive = True
 
         cmd = [
             "rpicam-vid",
@@ -1252,59 +1261,60 @@ class RPiMJPEGCamera:
         if self.proc.stdout is None:
             raise RuntimeError("failed to open rpicam-vid stdout pipe")
 
-    def read(self):
-        """
-        stdout에서 들어온 MJPEG 중
-        가장 최신의 완성 JPEG 프레임만 decode해서 반환
-        성공: (True, frame)
-        실패: (False, None)
-        """
-        while True:
+        self.thread = threading.Thread(target=self._reader_loop, daemon=True)
+        self.thread.start()
+
+    def _reader_loop(self):
+        while self.alive:
             chunk = self.proc.stdout.read(4096)
             if not chunk:
-                return False, None
+                break
 
             self.buffer.extend(chunk)
 
-            # 버퍼 안의 모든 JPEG 프레임 경계 찾기
             frames = []
             search_pos = 0
 
             while True:
-                start = self.buffer.find(b"\xff\xd8", search_pos)  # SOI
+                start = self.buffer.find(b"\xff\xd8", search_pos)
                 if start == -1:
                     break
 
-                end = self.buffer.find(b"\xff\xd9", start + 2)  # EOI
+                end = self.buffer.find(b"\xff\xd9", start + 2)
                 if end == -1:
                     break
 
                 frames.append((start, end + 2))
                 search_pos = end + 2
 
-            # 완성된 JPEG가 하나도 없으면 더 읽기
             if not frames:
-                # 버퍼가 너무 커지는 것 방지
                 if len(self.buffer) > 2 * 1024 * 1024:
                     self.buffer = self.buffer[-65536:]
                 continue
 
-            # 가장 마지막 완성 프레임만 사용
+            # 가장 최신 완성 프레임만 사용
             last_start, last_end = frames[-1]
             jpg = self.buffer[last_start:last_end]
 
-            # 마지막 프레임 뒤의 데이터만 남김
+            # 마지막 프레임 뒤 데이터만 남김
             self.buffer = self.buffer[last_end:]
 
             arr = np.frombuffer(jpg, dtype=np.uint8)
             frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-
             if frame is None:
                 continue
 
-            return True, frame
+            with self.lock:
+                self.latest_frame = frame
+
+    def read(self):
+        with self.lock:
+            if self.latest_frame is None:
+                return False, None
+            return True, self.latest_frame.copy()
 
     def release(self):
+        self.alive = False
         try:
             if self.proc.poll() is None:
                 self.proc.terminate()
