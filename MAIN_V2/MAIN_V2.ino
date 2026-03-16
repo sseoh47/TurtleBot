@@ -10,6 +10,7 @@ unsigned long lastRxTime = 0;
 const unsigned long RX_TIMEOUT = 300;
 
 bool startupRoutineActive = false;
+bool startupTriggered = false;
 uint8_t startupStep = 0;
 unsigned long startupStepStart = 0;
 
@@ -20,23 +21,38 @@ void setup()
     initMotor();
     initDrive();
 
-    startupRoutineActive = true;
+    startupRoutineActive = false;
+    startupTriggered = false;
     startupStep = 0;
-    startupStepStart = millis();
+    startupStepStart = 0;
 }
 
 void loop()
 {
+    if (readCommand(class_, angle, action))
+    {
+        lastRxTime = millis();
+    }
+
     // 시작하면 한번 실행될 루틴
+    if (!startupTriggered && class_ == 9)
+    {
+        startupRoutineActive = true;
+        startupTriggered = true;
+        startupStep = 0;
+        startupStepStart = millis();
+    }
+
+    else if (!startupTriggered)
+    {
+        executeBaseAction(ACT_STOP, 0);
+        return;
+    }
+
     if (startupRoutineActive)
     {
         updateStartupRoutine();
         return;
-    }
-
-    if (readCommand(class_, angle, action))
-    {
-        lastRxTime = millis();
     }
 
     if (class_ < 0 || class_ > 10)
