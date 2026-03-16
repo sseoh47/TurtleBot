@@ -62,7 +62,7 @@ def main():
     arduino = None
 
     try:
-        print("[INFO] controls: s=start signal, q=quit")
+        # print("[INFO] controls: s=start signal, q=quit")
 
         runner = DualModelRunner(
             lane_model=LANE_MODEL_PATH,

@@ -105,6 +105,27 @@ class LDS02:
             self.ranges[idx] = dist
             self.timestamps[idx] = now
 
+    def get_min_distance(self, min_angle: float, max_angle: float):
+        start = angle_to_idx(min_angle)
+        end = angle_to_idx(max_angle)
+        now = time.monotonic()
+        result = None
+
+        i = start
+        while True:
+            d = self.ranges[i]
+            ts = self.timestamps[i]
+
+            if d is not None and (now - ts) <= self.valid_time:
+                if result is None or d < result:
+                    result = d
+
+            if i == end:
+                break
+            i = (i + 1) % 360
+
+        return result
+
     def is_object_in_range(
         self, min_angle: float, max_angle: float, threshold_mm: int
     ) -> bool:
@@ -136,8 +157,26 @@ class LDS02:
           3 1초 정지 후 천천히 전진
           4 정지
         """
-        for _ in range(10):
-            self.update_once()
+        try:
+            for _ in range(10):
+                self.update_once()
+        except Exception as e:
+            print(f"[lidar] update Error")
+            return 0
+        d1 = self.is_object_in_range(45, 90, 400)
+        d2 = self.is_object_in_range(90, 100, 350)
+        d3 = self.is_object_in_range(-15, 0, 200)
+        d4 = self.is_object_in_range(-15, 15, 200)
+
+        m1 = self.get_min_distance(45, 90)
+        m2 = self.get_min_distance(90, 100)
+        m3 = self.get_min_distance(-15, 0)
+        m4 = self.get_min_distance(-15, 15)
+
+        print(f"[LIDAR] stage={self.stage} m1={m1} m2={m2} m3={m3} m4={m4}")
+
+        print(f"[LIDAR] stage={self.stage} d1={d1} d2={d2} d3={d3} d4={d4}")
+
         if self.stage == 0:
             if self.is_object_in_range(45, 90, 400):
                 self.stage = 1

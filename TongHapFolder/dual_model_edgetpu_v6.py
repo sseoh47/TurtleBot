@@ -1412,7 +1412,7 @@ class DualModelRunner:
             "[DEBUG] lane_shapes:",
             [(s["class_name"], round(s["conf"], 3)) for s in lane_shapes],
         )
-        print(f"[DEBUG] p_ls={p_ls}, p_is={p_is}, p_it={p_it}")
+        # print(f"[DEBUG] p_ls={p_ls}, p_is={p_is}, p_it={p_it}")
 
         obs_outs, _ = self.obs_eng.infer(frame)
         obs_list = parse_obstacle(obs_outs, H, W)
