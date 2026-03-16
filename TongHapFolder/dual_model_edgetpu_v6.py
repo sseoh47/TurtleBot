@@ -1254,7 +1254,8 @@ class RPiMJPEGCamera:
 
     def read(self):
         """
-        stdout에서 JPEG SOI/EOI를 찾아 한 프레임씩 decode해서 반환
+        stdout에서 들어온 MJPEG 중
+        가장 최신의 완성 JPEG 프레임만 decode해서 반환
         성공: (True, frame)
         실패: (False, None)
         """
@@ -1265,20 +1266,43 @@ class RPiMJPEGCamera:
 
             self.buffer.extend(chunk)
 
-            start = self.buffer.find(b"\xff\xd8")  # JPEG SOI
-            end = self.buffer.find(b"\xff\xd9")  # JPEG EOI
+            # 버퍼 안의 모든 JPEG 프레임 경계 찾기
+            frames = []
+            search_pos = 0
 
-            if start != -1 and end != -1 and end > start:
-                jpg = self.buffer[start : end + 2]
-                del self.buffer[: end + 2]
+            while True:
+                start = self.buffer.find(b"\xff\xd8", search_pos)  # SOI
+                if start == -1:
+                    break
 
-                arr = np.frombuffer(jpg, dtype=np.uint8)
-                frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+                end = self.buffer.find(b"\xff\xd9", start + 2)  # EOI
+                if end == -1:
+                    break
 
-                if frame is None:
-                    continue
+                frames.append((start, end + 2))
+                search_pos = end + 2
 
-                return True, frame
+            # 완성된 JPEG가 하나도 없으면 더 읽기
+            if not frames:
+                # 버퍼가 너무 커지는 것 방지
+                if len(self.buffer) > 2 * 1024 * 1024:
+                    self.buffer = self.buffer[-65536:]
+                continue
+
+            # 가장 마지막 완성 프레임만 사용
+            last_start, last_end = frames[-1]
+            jpg = self.buffer[last_start:last_end]
+
+            # 마지막 프레임 뒤의 데이터만 남김
+            self.buffer = self.buffer[last_end:]
+
+            arr = np.frombuffer(jpg, dtype=np.uint8)
+            frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+
+            if frame is None:
+                continue
+
+            return True, frame
 
     def release(self):
         try:
