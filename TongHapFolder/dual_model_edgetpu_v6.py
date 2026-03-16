@@ -1209,6 +1209,86 @@ def run(
 ###===============================================================
 from dataclasses import dataclass
 from typing import Optional
+import subprocess
+
+
+class RPiMJPEGCamera:
+    """
+    rpicam-vid를 MJPEG stdout 스트림으로 실행하고,
+    stdout에서 JPEG 프레임을 읽어 cv2 이미지로 변환한다.
+    """
+
+    def __init__(self, width=640, height=480, framerate=30):
+        self.width = width
+        self.height = height
+        self.framerate = framerate
+        self.buffer = bytearray()
+
+        cmd = [
+            "rpicam-vid",
+            "-t",
+            "0",
+            "--nopreview",
+            "--codec",
+            "mjpeg",
+            "--width",
+            str(width),
+            "--height",
+            str(height),
+            "--framerate",
+            str(framerate),
+            "-o",
+            "-",
+        ]
+
+        self.proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            bufsize=0,
+        )
+
+        if self.proc.stdout is None:
+            raise RuntimeError("failed to open rpicam-vid stdout pipe")
+
+    def read(self):
+        """
+        stdout에서 JPEG SOI/EOI를 찾아 한 프레임씩 decode해서 반환
+        성공: (True, frame)
+        실패: (False, None)
+        """
+        while True:
+            chunk = self.proc.stdout.read(4096)
+            if not chunk:
+                return False, None
+
+            self.buffer.extend(chunk)
+
+            start = self.buffer.find(b"\xff\xd8")  # JPEG SOI
+            end = self.buffer.find(b"\xff\xd9")  # JPEG EOI
+
+            if start != -1 and end != -1 and end > start:
+                jpg = self.buffer[start : end + 2]
+                del self.buffer[: end + 2]
+
+                arr = np.frombuffer(jpg, dtype=np.uint8)
+                frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+
+                if frame is None:
+                    continue
+
+                return True, frame
+
+    def release(self):
+        try:
+            if self.proc.poll() is None:
+                self.proc.terminate()
+                self.proc.wait(timeout=2.0)
+        except Exception:
+            try:
+                self.proc.kill()
+            except Exception:
+                pass
 
 
 @dataclass
@@ -1284,7 +1364,7 @@ class DualModelRunner:
         cam_h=480,
     ):
         self.coral = coral
-        self.use_picamera2 = False
+        self.use_rpicam = False
 
         if coral == 2 and use_edgetpu:
             print("[INFO] lane 모델 -> usb:0 로드")
@@ -1295,24 +1375,19 @@ class DualModelRunner:
         else:
             self.lane_eng = EdgeTPUEngine(lane_model, use_edgetpu=use_edgetpu)
             self.obs_eng = EdgeTPUEngine(obs_model, use_edgetpu=use_edgetpu)
-        ## Debugging
-        if isinstance(source, int):
-            if not PICAMERA2_AVAILABLE:
-                raise RuntimeError(
-                    "pi cam not installed, but camera source is requested"
+            ## Debugging
+            if isinstance(source, int):
+                print("[INFO] camera source detected -> use rpicam-vid MJPEG bridge")
+                self.cam = RPiMJPEGCamera(
+                    width=cam_w,
+                    height=cam_h,
+                    framerate=30,
                 )
-            self.picam2 = Picamera2()
-            config = self.picam2.create_preview_configuration(
-                main={"size": (cam_w, cam_h), "format": "RGB888"}
-            )
-            self.picam2.configure(config)
-            self.picam2.start()
-            time.sleep(1.0)
-            self.use_picamera2 = True
-        else:
-            self.cap = cv2.VideoCapture(source)
-            if not self.cap.isOpened():
-                raise RuntimeError("sourceopen failed: {source} ")
+                self.use_rpicam = True
+            else:
+                self.cap = cv2.VideoCapture(source)
+                if not self.cap.isOpened():
+                    raise RuntimeError(f"source open failed: {source}")
         self.fsm = IntersectionFSM()
 
         # self.cap = cv2.VideoCapture(source)
@@ -1327,23 +1402,15 @@ class DualModelRunner:
         self.fsm = IntersectionFSM()
 
     def step(self) -> Optional[DualInferenceResult]:
-        # ok, frame = self.cap.read()
-        # debugging
-        print(f"[Debug] cap.read() -> ok = {ok}, frame_is_none={frame is None}")
-        # if not ok:
-        #    return None
-        if self.use_picamera2:
-            frame_rgb = self.picam2.capture_array()
-            if frame_rgb is None:
-                return None
-            frame = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
+        if self.use_rpicam:
+            ok, frame = self.cam.read()
         else:
             ok, frame = self.cap.read()
-            if not ok:
-                return None
+
+        if not ok:
+            return None
 
         H, W = frame.shape[:2]
-        print(f"[DEBUG] frame size = {W}x{H}")
 
         lane_outs, _ = self.lane_eng.infer(frame)
         lane_shapes = parse_lane(lane_outs, H, W)
@@ -1367,12 +1434,10 @@ class DualModelRunner:
     # debugging
     def close(self):
         try:
-            if getAttr(self, "use_picamera2", False):
-                self.picam2.stop()
+            if getattr(self, "use_rpicam", False):
+                self.cam.release()
             else:
-                self.picam2.releas()
-
-            # self.cap.release()
+                self.cap.release()
         except Exception:
             pass
 
