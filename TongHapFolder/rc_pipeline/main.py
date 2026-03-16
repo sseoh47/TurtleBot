@@ -107,7 +107,8 @@ def main():
                 break
 
             start_signal = time.monotonic() < start_signal_until
-            lidar_action = lidar.check_action()
+            # lidar_action = lidar.check_action()
+            lidar_action = 0
 
             final_class, final_angle, final_action = signal_det(
                 obj_id=result.obj_id,
