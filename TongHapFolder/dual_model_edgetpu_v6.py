@@ -1364,7 +1364,6 @@ class DualModelRunner:
         cam_h=480,
     ):
         self.coral = coral
-        self.use_rpicam = False
 
         if coral == 2 and use_edgetpu:
             print("[INFO] lane 모델 -> usb:0 로드")
@@ -1375,29 +1374,21 @@ class DualModelRunner:
         else:
             self.lane_eng = EdgeTPUEngine(lane_model, use_edgetpu=use_edgetpu)
             self.obs_eng = EdgeTPUEngine(obs_model, use_edgetpu=use_edgetpu)
-            ## Debugging
-            if isinstance(source, int):
-                print("[INFO] camera source detected -> use rpicam-vid MJPEG bridge")
-                self.cam = RPiMJPEGCamera(
-                    width=cam_w,
-                    height=cam_h,
-                    framerate=30,
-                )
-                self.use_rpicam = True
-            else:
-                self.cap = cv2.VideoCapture(source)
-                if not self.cap.isOpened():
-                    raise RuntimeError(f"source open failed: {source}")
-        self.fsm = IntersectionFSM()
 
-        # self.cap = cv2.VideoCapture(source)
-        # if not self.cap.isOpened():
-        #    raise RuntimeError(f"source open failed: {source}")
+        self.use_rpicam = False
 
-        # if isinstance(source, int):
-        #    self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, cam_w)
-        #    self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, cam_h)
-        #    self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        if isinstance(source, int):
+            print("[INFO] camera source detected -> use rpicam-vid MJPEG bridge")
+            self.cam = RPiMJPEGCamera(
+                width=cam_w,
+                height=cam_h,
+                framerate=30,
+            )
+            self.use_rpicam = True
+        else:
+            self.cap = cv2.VideoCapture(source)
+            if not self.cap.isOpened():
+                raise RuntimeError(f"source open failed: {source}")
 
         self.fsm = IntersectionFSM()
 
@@ -1431,7 +1422,6 @@ class DualModelRunner:
             inter_type=p_it if p_is else None,
         )
 
-    # debugging
     def close(self):
         try:
             if getattr(self, "use_rpicam", False):
