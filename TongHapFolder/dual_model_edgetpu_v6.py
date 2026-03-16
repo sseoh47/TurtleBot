@@ -60,11 +60,12 @@ from pathlib import Path
 
 try:
     from picamera2 import Picamera2
+
     PICAMERA2_AVAILABLE = True
     print("[debug] picamera import success")
 except Exception as e:
     PICAMERA2_AVAILABLE = False
-    print("[debug] picamera import failed",repr(e))
+    print("[debug] picamera import failed", repr(e))
 # ──────────────────────────────────────────────
 # Runtime 로드
 # ──────────────────────────────────────────────
@@ -1295,27 +1296,30 @@ class DualModelRunner:
             self.lane_eng = EdgeTPUEngine(lane_model, use_edgetpu=use_edgetpu)
             self.obs_eng = EdgeTPUEngine(obs_model, use_edgetpu=use_edgetpu)
         ## Debugging
-        if isinstance(source,int):
+        if isinstance(source, int):
             if not PICAMERA2_AVAILABLE:
-                raise RuntimeError("pi cam not installed, but camera source is requested")
+                raise RuntimeError(
+                    "pi cam not installed, but camera source is requested"
+                )
             self.picam2 = Picamera2()
-            config = self.picam2.create_preview_configuration(main = {"size" : (cam_w,cam_h), "format" : "RGB888"})
+            config = self.picam2.create_preview_configuration(
+                main={"size": (cam_w, cam_h), "format": "RGB888"}
+            )
             self.picam2.configure(config)
             self.picam2.start()
             time.sleep(1.0)
             self.use_picamera2 = True
-        else : 
+        else:
             self.cap = cv2.VideoCapture(source)
             if not self.cap.isOpened():
                 raise RuntimeError("sourceopen failed: {source} ")
         self.fsm = IntersectionFSM()
-            
 
-        #self.cap = cv2.VideoCapture(source)
-        #if not self.cap.isOpened():
+        # self.cap = cv2.VideoCapture(source)
+        # if not self.cap.isOpened():
         #    raise RuntimeError(f"source open failed: {source}")
 
-        #if isinstance(source, int):
+        # if isinstance(source, int):
         #    self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, cam_w)
         #    self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, cam_h)
         #    self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
@@ -1323,10 +1327,10 @@ class DualModelRunner:
         self.fsm = IntersectionFSM()
 
     def step(self) -> Optional[DualInferenceResult]:
-        #ok, frame = self.cap.read()
-        #debugging
+        # ok, frame = self.cap.read()
+        # debugging
         print(f"[Debug] cap.read() -> ok = {ok}, frame_is_none={frame is None}")
-        #if not ok:
+        # if not ok:
         #    return None
         if self.use_picamera2:
             frame_rgb = self.picam2.capture_array()
@@ -1359,15 +1363,16 @@ class DualModelRunner:
             lane_status=p_ls,
             inter_type=p_it if p_is else None,
         )
-    #debugging
+
+    # debugging
     def close(self):
         try:
-            if getAttr(self,"use_picamera2",False):
+            if getAttr(self, "use_picamera2", False):
                 self.picam2.stop()
             else:
                 self.picam2.releas()
-                
-            #self.cap.release()
+
+            # self.cap.release()
         except Exception:
             pass
 

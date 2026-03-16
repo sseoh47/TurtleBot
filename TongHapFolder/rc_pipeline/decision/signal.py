@@ -29,6 +29,8 @@ def signal_det(
       3 좌측 제자리 90도 회전
       4 우측 제자리 90도 회전
     """
+    if start_signal:
+        return 9, None, 0
 
     if obj_id in (3, 4):
         return obj_id, None, 0
@@ -47,7 +49,5 @@ def signal_det(
 
     if line_id == 1:
         return 1, angle, 0
-    if start_signal:
-        return 9, None, 0
 
     return 0, None, 0

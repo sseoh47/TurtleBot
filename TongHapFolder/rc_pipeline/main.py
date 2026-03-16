@@ -79,6 +79,7 @@ def main():
     )
     # 전송속도 필터링을 위한 변수
     last_send_time = 0.0
+    start_signal_until = 0.0
 
     try:
         while True:
@@ -87,13 +88,12 @@ def main():
             if result is None:
                 print("[INFO] inference result is None, stop.")
                 break
-            ## 키보드 테스트용
-            # if check_start_key():
-            #     start_signal = True
-            # else:
-            #     start_signal = False
 
-            start_signal = check_start_key()
+            if check_start_key():
+                start_signal_until = time.monotonic() + 1.0
+                print("[KEY] start signal triggered")
+
+            start_signal = time.monotonic() < start_signal_until
             lidar_action = lidar.check_action()
 
             # 마이크 붙이기 전까지 False
