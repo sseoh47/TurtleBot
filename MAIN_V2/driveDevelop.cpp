@@ -76,7 +76,7 @@ static bool slowActionActive = false;
 TimedAction logisticsRoutineIn[] =
 {
     {ACT_ROTATE_R, 0.0f, 2450, 0.0f},
-    {ACT_FORWARD, 0.0f, 2000, -10.0f},
+    {ACT_FORWARD, 0.0f, 2500, -10.0f},
     {ACT_ROTATE_R, 0.0f, 2450, 0.0f},
     {ACT_REVERSE, 0.0f, 2500, -10.0f},
     {ACT_STOP,    0.0f,    0}
@@ -88,7 +88,7 @@ const int logisticsRoutineInLength =
 // ================= 물류 루틴 OUT =================
 TimedAction logisticsRoutineOut[] =
 {
-    {ACT_FORWARD, 0.0f, 3000, -10.0f},
+    {ACT_FORWARD, 0.0f, 2500, -10.0f},
     {ACT_ROTATE_L, 0.0f, 2450, 0.0f},
     {ACT_STOP,    0.0f,    0}
 };
@@ -99,7 +99,7 @@ const int logisticsRoutineOutLength =
 // ================= 물류X PASS 루틴 =================
 TimedAction logisticsRoutinePASS[] =
 {
-    {ACT_REVERSE, 0.0f, 1500, -10.0f},
+    {ACT_REVERSE, 0.0f, 1000, -10.0f},
     {ACT_ROTATE_R, 0.0f, 2450, 0.0f},
     {ACT_STOP,    0.0f,    0}
 };
@@ -110,10 +110,10 @@ const int logisticsRoutinePASSLength =
 // ================= 주차 루틴 =================
 TimedAction parkingRoutine[] =
 {
-    {ACT_ROTATE_R, 0.0f, 2450, 0.0f},
-    {ACT_FORWARD, 0.0f, 2000, -10.0f},
-    {ACT_ROTATE_R, 0.0f, 2450, 0.0f},
-    {ACT_REVERSE, 0.0f, 2000, -10.0f},
+    {ACT_ROTATE_L, 0.0f, 2450, 0.0f},
+    {ACT_FORWARD, 0.0f, 3000, -10.0f},
+    {ACT_ROTATE_L, 0.0f, 2450, 0.0f},
+    {ACT_REVERSE, 0.0f, 4000, -10.0f},
     {ACT_STOP,    0.0f,    0}
 };
 
@@ -169,6 +169,13 @@ void updateRoutine()
         stopMotors();
         cancelRoutine();
 
+        if (finished == parkingRoutine)
+        {   
+            while (true)
+            {
+                stopMotors();
+            }
+        }
         if (finished == logisticsRoutineIn)
             driveMode = MODE_LOGISTICIn;   // IN 끝났으니 대기 모드
         else
@@ -193,6 +200,14 @@ void updateRoutine()
 
         stopMotors();
         cancelRoutine();
+
+        if (finished == parkingRoutine)
+        {
+            while (true)
+            {
+                stopMotors();
+            }
+        }
 
         if (finished == logisticsRoutineIn)
             driveMode = MODE_LOGISTICIn;
