@@ -149,7 +149,7 @@ class LDS02:
                 return 2
 
         elif self.stage == 2:
-            if self.is_object_in_range(-15, 15, 200):
+            if self.is_object_in_range(-15, 0, 200):
                 self.stage = 3
                 return 3
 
