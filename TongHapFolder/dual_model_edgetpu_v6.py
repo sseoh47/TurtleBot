@@ -1307,11 +1307,16 @@ class RPiMJPEGCamera:
             with self.lock:
                 self.latest_frame = frame
 
-    def read(self):
-        with self.lock:
-            if self.latest_frame is None:
-                return False, None
-            return True, self.latest_frame.copy()
+    def read(self, wait_timeout=2.0):
+        deadline = time.monotonic() + wait_timeout
+
+        while self.alive and time.monotonic() < deadline:
+            with self.lock:
+                if self.latest_frame is not None:
+                    return True, self.latest_frame.copy()
+            time.sleep(0.01)
+
+        return False, None
 
     def release(self):
         self.alive = False
