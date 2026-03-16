@@ -33,19 +33,21 @@ def signal_det(
     if obj_id in (3, 4):
         return obj_id, None, 0
 
-    if start_signal:
-        return 10, None, 0
+    # if start_signal:
+    #     return 10, None, 0
 
-    if obj_id in (2, 5):
+    if obj_id in (2, 5, 10):
         return obj_id, None, lidar_action
 
     if line_id == 1 and lidar_action != 0:
         return 1, angle, lidar_action
 
-    if line_id in (6, 7, 8, 9):
+    if line_id in (6, 7, 8):
         return line_id, None, 0
 
     if line_id == 1:
         return 1, angle, 0
+    if start_signal:
+        return 9, None, 0
 
     return 0, None, 0

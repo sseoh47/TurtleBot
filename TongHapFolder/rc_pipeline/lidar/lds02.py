@@ -132,29 +132,30 @@ class LDS02:
         action:
           0 기본
           1 서행
-          2 정지
-          3 좌측 90도 회전
-          4 우측 90도 회전
+          2 왼쪽 제자리회전
+          3 1초 정지 후 천천히 전진
+          4 정지
         """
         for _ in range(10):
             self.update_once()
-
-        if self.is_object_in_range(-15, 15, 100):
-            return 2
-
-        if self.stage == 0:
+        if self.state == 0:
             if self.is_object_in_range(45, 90, 400):
                 self.stage = 1
                 return 1
 
         elif self.stage == 1:
-            if self.is_object_in_range(80, 100, 350):
+            if self.is_object_in_range(90, 100, 350):
                 self.stage = 2
-                return 3
+                return 2
 
         elif self.stage == 2:
-            if self.is_object_in_range(-15, 15, 150):
+            if self.is_object_in_range(-15, 15, 200):
                 self.stage = 3
-                return 2
+                return 3
+
+        elif self.stage == 3:
+            if self.is_object_in_range(-15, 15, 200):
+                self.stage = 0
+                return 4
 
         return 0

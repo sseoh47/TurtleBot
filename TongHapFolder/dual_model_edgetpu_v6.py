@@ -596,9 +596,10 @@ def _draw_frame(d: dict) -> np.ndarray:
     return vis
 
 
-# 객체 클래스명 -> 출력 ID 맵핑 (0~9 체계)
-# KNU, box 는 출력 안 함
+# 객체 클래스명 -> 출력 ID 맵핑 (0~10 체계)
+# KNU, 는 10으로 출력 box는 아직 미정
 OBS_OUTPUT_ID = {
+    "KNU": 10,  #
     "SL": 2,  # 2번
     "person": 3,  # 3번
     "car": 4,  # 4번

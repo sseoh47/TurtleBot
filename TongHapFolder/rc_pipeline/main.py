@@ -2,9 +2,13 @@ import sys
 import time
 from pathlib import Path
 
+# 키보드 테스트용
+import select
+
 ROOT_DIR = Path(__file__).resolve().parent
 PROJECT_PARENT = ROOT_DIR.parent
 TOP_DIR = PROJECT_PARENT.parent
+
 
 if str(PROJECT_PARENT) not in sys.path:
     sys.path.append(str(PROJECT_PARENT))
@@ -38,6 +42,17 @@ from comm.arduino_serial import ArduinoSerial
 from dual_model_edgetpu_v6 import DualModelRunner
 
 
+# 키보드 테스트용
+def check_start_key():
+    """키보드 입력 체크
+    s누르면 True 반환"""
+    if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
+        key = sys.stdin.readline().strip()
+        if key.lower() == "s":
+            return True
+        return False
+
+
 def main():
     # 듀얼모델 러너 클래스 생성
     runner = DualModelRunner(
@@ -69,10 +84,16 @@ def main():
 
     try:
         while True:
+
             result = runner.step()
             if result is None:
                 print("[INFO] inference result is None, stop.")
                 break
+            ## 키보드 테스트용
+            if check_start_key():
+                start_signal = True
+            else:
+                start_signal = False
 
             lidar_action = lidar.check_action()
 
