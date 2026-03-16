@@ -39,6 +39,7 @@ from dual_model_edgetpu_v6 import DualModelRunner
 
 
 def main():
+    # 듀얼모델 러너 클래스 생성
     runner = DualModelRunner(
         lane_model=LANE_MODEL_PATH,
         obs_model=OBS_MODEL_PATH,
@@ -48,7 +49,7 @@ def main():
         cam_w=CAM_W,
         cam_h=CAM_H,
     )
-
+    # 라이다 클래스 생성
     lidar = LDS02(
         port=LIDAR_PORT,
         baud=LIDAR_BAUDRATE,
@@ -58,12 +59,12 @@ def main():
         dist_max=LIDAR_DIST_MAX,
         valid_time=LIDAR_VALID_TIME,
     )
-
+    # 라이다 시리얼 생성
     arduino = ArduinoSerial(
         port=ARDUINO_PORT,
         baudrate=ARDUINO_BAUDRATE,
     )
-
+    # 전송속도 필터링을 위한 변수
     last_send_time = 0.0
 
     try:
@@ -76,6 +77,7 @@ def main():
             lidar_action = lidar.check_action()
 
             # 마이크 붙이기 전까지 False
+            # 마이크 모델 어디있는지 확인
             start_signal = False
 
             final_class, final_angle, final_action = signal_det(
