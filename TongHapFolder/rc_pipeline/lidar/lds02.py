@@ -95,7 +95,7 @@ class LDS02:
             dist = u16_le(data[off], data[off + 1])
             conf = data[off + 2]
             angle = wrap_deg(start_angle + step * i)
-            idx = angle_to_idx(180 - angle)
+            idx = angle_to_idx(-angle)
 
             if conf < self.conf_min:
                 continue
