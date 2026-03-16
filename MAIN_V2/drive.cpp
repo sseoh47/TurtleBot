@@ -5,6 +5,14 @@ DriveMode driveMode = MODE_MANUAL;
 // class 0에서 사용할 최근 유효 조향각
 static float heldDriveAngle = 0.0f;
 
+static bool rotateActive = false;
+static int rotateDir = 0; //-1:left, 1:right
+
+static int32_t startLeft = 0;
+static int32_t startRight = 0;
+
+static const int ROTATE_TICK = 950; //whwjd
+
 // =========================
 // 초기화
 // =========================
@@ -34,11 +42,17 @@ void executeBaseAction(BaseAction act, float angle, float speedOffset)
             break;
 
         case ACT_ROTATE_L:
-            setWheelRPM(-15.0f, 15.0f);
+            if (!rotateActive)
+                startRotate(-1);
+
+            updateRotate();
             break;
 
         case ACT_ROTATE_R:
-            setWheelRPM(15.0f, -15.0f);
+            if (!rotateActive)
+                startRotate(1);
+
+            updateRotate();
             break;
 
         case ACT_REVERSE:
@@ -150,4 +164,65 @@ void handleDefault()
         return;
 
     executeBaseAction(ACT_FORWARD, heldDriveAngle);
+}
+
+int32_t getLeftEncoder()
+{
+    return getLeftPosition();   // motor.cpp에 있는 함수
+}
+
+int32_t getRightEncoder()
+{
+    return getRightPosition();
+}
+
+int32_t targetLeft;
+int32_t targetRight;
+
+void startRotate(int dir)
+{
+    rotateActive = true;
+    rotateDir = dir;   
+
+    startLeft = getLeftEncoder();
+    startRight = getRightEncoder();
+
+    if (dir == -1)
+    {
+        targetLeft  = startLeft  - ROTATE_TICK;
+        targetRight = startRight + ROTATE_TICK;
+    }
+    else
+    {
+        targetLeft  = startLeft  + ROTATE_TICK;
+        targetRight = startRight - ROTATE_TICK;
+    }
+}
+
+void updateRotate()
+{
+    int32_t left = getLeftEncoder();
+    int32_t right = getRightEncoder();
+
+    if (rotateDir == -1)
+        setWheelRPM(-15, 15);
+    else
+        setWheelRPM(15, -15);
+
+    if (rotateDir == -1)
+    {
+        if (left <= targetLeft && right >= targetRight)
+        {
+            stopMotors();
+            rotateActive = false;
+        }
+    }
+    else
+    {
+        if (left >= targetLeft && right <= targetRight)
+        {
+            stopMotors();
+            rotateActive = false;
+        }
+    }
 }

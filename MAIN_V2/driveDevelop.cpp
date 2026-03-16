@@ -75,10 +75,10 @@ static bool slowActionActive = false;
 // ================= 물류 루틴 IN =================
 TimedAction logisticsRoutineIn[] =
 {
-    {ACT_ROTATE_R, 0.0f, 2450, 0.0f},
-    {ACT_FORWARD, 0.0f, 2000, -10.0f},
-    {ACT_ROTATE_R, 0.0f, 2450, 0.0f},
-    {ACT_REVERSE, 0.0f, 2500, -10.0f},
+    {ACT_ROTATE_R, 0.0f, 1000, 0.0f},
+    {ACT_ROTATE_L, 0.0f, 1000, 0.0f},
+    {ACT_ROTATE_R, 0.0f, 1000, 0.0f},
+    {ACT_ROTATE_L, 0.0f, 1000, 0.0f},
     {ACT_STOP,    0.0f,    0}
 };
 
