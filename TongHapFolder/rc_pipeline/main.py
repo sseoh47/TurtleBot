@@ -1,14 +1,13 @@
 import sys
 import time
-from pathlib import Path
-
-# 키보드 테스트용
 import select
+import termios
+import tty
+from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parent
 PROJECT_PARENT = ROOT_DIR.parent
 TOP_DIR = PROJECT_PARENT.parent
-
 
 if str(PROJECT_PARENT) not in sys.path:
     sys.path.append(str(PROJECT_PARENT))
@@ -42,63 +41,73 @@ from comm.arduino_serial import ArduinoSerial
 from dual_model_edgetpu_v6 import DualModelRunner
 
 
-# 키보드 테스트용
-def check_start_key():
-    """키보드 입력 체크: s + 엔터 누르면 True"""
-    if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
-        key = sys.stdin.readline().strip()
-        return key.lower() == "s"
-    return False
+def get_key_nonblock():
+    """
+    엔터 없이 키 1개 읽기.
+    입력이 없으면 None 반환.
+    """
+    dr, _, _ = select.select([sys.stdin], [], [], 0)
+    if dr:
+        return sys.stdin.read(1)
+    return None
 
 
 def main():
-    # 듀얼모델 러너 클래스 생성
-    runner = DualModelRunner(
-        lane_model=LANE_MODEL_PATH,
-        obs_model=OBS_MODEL_PATH,
-        source=CAMERA_SOURCE,
-        coral=CORAL_COUNT,
-        use_edgetpu=USE_EDGETPU,
-        cam_w=CAM_W,
-        cam_h=CAM_H,
-    )
-    # 라이다 클래스 생성
-    lidar = LDS02(
-        port=LIDAR_PORT,
-        baud=LIDAR_BAUDRATE,
-        timeout=LIDAR_TIMEOUT,
-        conf_min=LIDAR_CONF_MIN,
-        dist_min=LIDAR_DIST_MIN,
-        dist_max=LIDAR_DIST_MAX,
-        valid_time=LIDAR_VALID_TIME,
-    )
-    # 라이다 시리얼 생성
-    arduino = ArduinoSerial(
-        port=ARDUINO_PORT,
-        baudrate=ARDUINO_BAUDRATE,
-    )
-    # 전송속도 필터링을 위한 변수
-    last_send_time = 0.0
-    start_signal_until = 0.0
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    tty.setcbreak(fd)
+
+    runner = None
+    lidar = None
+    arduino = None
 
     try:
+        print("[INFO] controls: s=start signal, q=quit")
+
+        runner = DualModelRunner(
+            lane_model=LANE_MODEL_PATH,
+            obs_model=OBS_MODEL_PATH,
+            source=CAMERA_SOURCE,
+            coral=CORAL_COUNT,
+            use_edgetpu=USE_EDGETPU,
+            cam_w=CAM_W,
+            cam_h=CAM_H,
+        )
+
+        lidar = LDS02(
+            port=LIDAR_PORT,
+            baud=LIDAR_BAUDRATE,
+            timeout=LIDAR_TIMEOUT,
+            conf_min=LIDAR_CONF_MIN,
+            dist_min=LIDAR_DIST_MIN,
+            dist_max=LIDAR_DIST_MAX,
+            valid_time=LIDAR_VALID_TIME,
+        )
+
+        arduino = ArduinoSerial(
+            port=ARDUINO_PORT,
+            baudrate=ARDUINO_BAUDRATE,
+        )
+
+        last_send_time = 0.0
+        start_signal_until = 0.0
+
         while True:
+            key = get_key_nonblock()
+            if key == "q":
+                print("\n[INFO] quit requested")
+                break
+            elif key == "s":
+                start_signal_until = time.monotonic() + 1.0
+                print("\n[KEY] start signal triggered")
 
             result = runner.step()
             if result is None:
-                print("[INFO] inference result is None, stop.")
+                print("\n[INFO] inference result is None, stop.")
                 break
-
-            if check_start_key():
-                start_signal_until = time.monotonic() + 1.0
-                print("[KEY] start signal triggered")
 
             start_signal = time.monotonic() < start_signal_until
             lidar_action = lidar.check_action()
-
-            # 마이크 붙이기 전까지 False
-            # 마이크 모델 어디있는지 확인
-            # start_signal = False
 
             final_class, final_angle, final_action = signal_det(
                 obj_id=result.obj_id,
@@ -138,20 +147,25 @@ def main():
                     )
 
     finally:
-        try:
-            runner.close()
-        except Exception:
-            pass
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
-        try:
-            lidar.close()
-        except Exception:
-            pass
+        if runner is not None:
+            try:
+                runner.close()
+            except Exception:
+                pass
 
-        try:
-            arduino.close()
-        except Exception:
-            pass
+        if lidar is not None:
+            try:
+                lidar.close()
+            except Exception:
+                pass
+
+        if arduino is not None:
+            try:
+                arduino.close()
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":
