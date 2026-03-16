@@ -1383,7 +1383,7 @@ class DualModelRunner:
             self.cam = RPiMJPEGCamera(
                 width=cam_w,
                 height=cam_h,
-                framerate=30,
+                framerate=10,
             )
             self.use_rpicam = True
         else:
