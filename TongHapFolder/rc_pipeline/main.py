@@ -44,13 +44,11 @@ from dual_model_edgetpu_v6 import DualModelRunner
 
 # 키보드 테스트용
 def check_start_key():
-    """키보드 입력 체크
-    s누르면 True 반환"""
+    """키보드 입력 체크: s + 엔터 누르면 True"""
     if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
         key = sys.stdin.readline().strip()
-        if key.lower() == "s":
-            return True
-        return False
+        return key.lower() == "s"
+    return False
 
 
 def main():
@@ -90,16 +88,17 @@ def main():
                 print("[INFO] inference result is None, stop.")
                 break
             ## 키보드 테스트용
-            if check_start_key():
-                start_signal = True
-            else:
-                start_signal = False
+            # if check_start_key():
+            #     start_signal = True
+            # else:
+            #     start_signal = False
 
+            start_signal = check_start_key()
             lidar_action = lidar.check_action()
 
             # 마이크 붙이기 전까지 False
             # 마이크 모델 어디있는지 확인
-            start_signal = False
+            # start_signal = False
 
             final_class, final_angle, final_action = signal_det(
                 obj_id=result.obj_id,
