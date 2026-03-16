@@ -138,7 +138,7 @@ class LDS02:
         """
         for _ in range(10):
             self.update_once()
-        if self.state == 0:
+        if self.stage == 0:
             if self.is_object_in_range(45, 90, 400):
                 self.stage = 1
                 return 1
