@@ -1,5 +1,7 @@
 #include "drive.h"
 
+static unsigned long stopStart = 0;
+static const unsigned long STOP_DURATION = 1000; // 500ms 정지
 
 // ================= setup 시작 루틴  =================
 void updateStartupRoutine()
@@ -226,6 +228,11 @@ void handleSpecialTarget(int classId, float angle, int action)
     //     slowActionDone = false;
     // }
 
+    if (action != 3)
+    {
+        slowActionActive = false;
+    }
+
     switch (action)
     {
         case 1:
@@ -264,18 +271,23 @@ void handleSpecialTarget(int classId, float angle, int action)
             //     executeBaseAction(ACT_SLOW, 0);
             // }
             break;
+            
         case 3:
             if (!slowActionActive)
             {
                 slowActionActive = true;
-                executeBaseAction(ACT_STOP, 0.0f);
-                unsigned int three_now = millis();
+                stopStart = millis();
             }
-            if (slowActionActive && (now - three_now > 1000))
+
+            if (millis() - stopStart < STOP_DURATION)
             {
-                executeBaseAction(ACT_SLOW, angle);
-                break;
+                executeBaseAction(ACT_STOP, 0.0f);
+                return;
             }
+
+            executeBaseAction(ACT_SLOW, angle);
+            break;
+
 
         case 4:
         case 9:
