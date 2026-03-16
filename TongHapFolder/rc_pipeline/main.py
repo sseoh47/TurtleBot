@@ -100,8 +100,10 @@ def main():
             elif key == "s":
                 start_signal_until = time.monotonic() + 1.0
                 print("\n[KEY] start signal triggered")
-
+            ## debug
+            loop_t0 = time.monotonic()
             result = runner.step()
+            print(f"[LOOP] dt={time.monotonic() - loop_t0:.3f}s")
             if result is None:
                 print("\n[INFO] inference result is None, stop.")
                 break
