@@ -443,6 +443,7 @@ def compute_lane_error(shapes):
     return 0.0, "lost"
 
 
+##이거뭐지 debugging
 class IntersectionFSM:
     def __init__(
         self, confirm=2, hold=10, maxhist=33
@@ -1407,6 +1408,11 @@ class DualModelRunner:
         lane_shapes = parse_lane(lane_outs, H, W)
         p_le, p_ls = compute_lane_error(lane_shapes)
         (p_is, p_it), _ = self.fsm.update(lane_shapes)
+        print(
+            "[DEBUG] lane_shapes:",
+            [(s["class_name"], round(s["conf"], 3)) for s in lane_shapes],
+        )
+        print(f"[DEBUG] p_ls={p_ls}, p_is={p_is}, p_it={p_it}")
 
         obs_outs, _ = self.obs_eng.infer(frame)
         obs_list = parse_obstacle(obs_outs, H, W)
