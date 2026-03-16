@@ -1,7 +1,7 @@
 #include "communication.h"
 #include "drive.h"
 #include "motor.h"
-
+// 테스트 파일
 int class_ = 0;
 float angle = 0.0f;
 int action = 0;
