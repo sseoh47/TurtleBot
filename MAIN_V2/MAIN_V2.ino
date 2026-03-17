@@ -58,7 +58,7 @@ void loop()
     if (class_ < 0 || class_ > 10)
         class_ = 0;
 
-    if (!(action == 0 || action == 1 || action == 2 || action == 3 || action == 4 || action == 9))
+    if (!(action == 0 || action == 1 || action == 2 || action == 3 || action == 4))
         action = 0;
 
     if (class_ == 3 || class_ == 4)
