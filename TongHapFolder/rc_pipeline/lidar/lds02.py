@@ -183,12 +183,12 @@ class LDS02:
                 return 1
 
         elif self.stage == 1:
-            if self.is_object_in_range(90, 100, 350):
+            if self.is_object_in_range(80, 110, 350):
                 self.stage = 2
                 return 2
 
         elif self.stage == 2:
-            if self.is_object_in_range(-15, 0, 200):
+            if self.is_object_in_range(345, 10, 200):
                 self.stage = 3
                 return 3
 
