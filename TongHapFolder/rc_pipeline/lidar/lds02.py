@@ -158,7 +158,7 @@ class LDS02:
           4 정지
         """
         try:
-            for _ in range(10):
+            for _ in range(30):  # 기존은 10
                 self.update_once()
         except Exception as e:
             print(f"[lidar] update Error")
