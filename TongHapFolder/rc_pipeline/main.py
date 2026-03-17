@@ -4,6 +4,12 @@ import select
 import termios
 import tty
 from pathlib import Path
+import os
+
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+PARENT_DIR = os.path.dirname(CURRENT_DIR)
+if PARENT_DIR not in sys.path:
+    sys.path.insert(0, PARENT_DIR)
 
 ## 모델 돌리기 위한 import들
 from domain.types import FinalCommand
