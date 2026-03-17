@@ -95,8 +95,9 @@ except ImportError:
 # ──────────────────────────────────────────────
 # 상수
 # ──────────────────────────────────────────────
-CONF_THRESH = 0.35  # det 모델 기준으로 낮춤 (필요시 조정)
-NMS_IOU = 0.35  # 겹치는 박스 적극 제거
+## debugging confidence 0.35 ->
+CONF_THRESH = 0.5  # det 모델 기준으로 낮춤 (필요시 조정)
+NMS_IOU = 0.5  # 겹치는 박스 적극 제거
 LANE_DEBUG_ONCE = True  # 첫 프레임 디버그 출력 (확인 후 False로 변경)
 
 LANE_NAMES = {0: "curve", 1: "eeu", 2: "line"}
