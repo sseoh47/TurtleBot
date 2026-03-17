@@ -98,7 +98,7 @@ def main():
                 print("\n[INFO] quit requested")
                 break
             elif key == "s":
-                start_signal_until = time.monotonic() + 1.0
+                start_signal_until = time.monotonic() + 0.5
                 print("\n[KEY] start signal triggered")
             ## debug
             loop_t0 = time.monotonic()

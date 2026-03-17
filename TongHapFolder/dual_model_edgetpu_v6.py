@@ -1217,6 +1217,12 @@ import subprocess
 import cv2
 import numpy as np
 
+import threading
+import subprocess
+import cv2
+import numpy as np
+import time
+
 
 class RPiMJPEGCamera:
     """
@@ -1231,6 +1237,9 @@ class RPiMJPEGCamera:
 
         self.buffer = bytearray()
         self.latest_frame = None
+        self.latest_frame_id = 0
+        self.latest_rx_done_mono = None
+
         self.lock = threading.Lock()
         self.alive = True
 
@@ -1264,7 +1273,19 @@ class RPiMJPEGCamera:
         self.thread = threading.Thread(target=self._reader_loop, daemon=True)
         self.thread.start()
 
+        # 첫 프레임이 올 때까지 잠깐 대기
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline:
+            with self.lock:
+                if self.latest_frame is not None:
+                    break
+            time.sleep(0.01)
+
     def _reader_loop(self):
+        print("[CAM] reader thread started")
+
+        first_frame_logged = False
+
         while self.alive:
             chunk = self.proc.stdout.read(4096)
             if not chunk:
@@ -1276,11 +1297,11 @@ class RPiMJPEGCamera:
             search_pos = 0
 
             while True:
-                start = self.buffer.find(b"\xff\xd8", search_pos)
+                start = self.buffer.find(b"\xff\xd8", search_pos)  # JPEG SOI
                 if start == -1:
                     break
 
-                end = self.buffer.find(b"\xff\xd9", start + 2)
+                end = self.buffer.find(b"\xff\xd9", start + 2)  # JPEG EOI
                 if end == -1:
                     break
 
@@ -1304,8 +1325,16 @@ class RPiMJPEGCamera:
             if frame is None:
                 continue
 
+            rx_done = time.monotonic()
+
             with self.lock:
                 self.latest_frame = frame
+                self.latest_frame_id += 1
+                self.latest_rx_done_mono = rx_done
+
+                if not first_frame_logged:
+                    print("[CAM] first frame received")
+                    first_frame_logged = True
 
     def read(self, wait_timeout=2.0):
         deadline = time.monotonic() + wait_timeout
@@ -1313,8 +1342,12 @@ class RPiMJPEGCamera:
         while self.alive and time.monotonic() < deadline:
             with self.lock:
                 if self.latest_frame is not None:
-                    return True, self.latest_frame.copy()
-            time.sleep(0.01)
+                    return True, {
+                        "frame": self.latest_frame.copy(),
+                        "frame_id": self.latest_frame_id,
+                        "rx_done_mono": self.latest_rx_done_mono,
+                    }
+            time.sleep(0.005)
 
         return False, None
 
@@ -1329,6 +1362,140 @@ class RPiMJPEGCamera:
                 self.proc.kill()
             except Exception:
                 pass
+
+
+# class RPiMJPEGCamera:
+#     """
+#     rpicam-vid MJPEG stdout을 백그라운드 스레드에서 계속 읽고,
+#     항상 최신 프레임 1장만 유지한다.
+#     """
+
+#     def __init__(self, width=640, height=480, framerate=10):
+#         self.width = width
+#         self.height = height
+#         self.framerate = framerate
+
+#         ## debugging
+#         self.latest_frame = None
+#         self.latest_frame_id = 0
+#         self.latest_rx_done_mono = None
+#         self.latest_decode_done_mono = None
+
+#         self.buffer = bytearray()
+#         self.latest_frame = None
+#         self.lock = threading.Lock()
+#         self.alive = True
+
+#         cmd = [
+#             "rpicam-vid",
+#             "-t",
+#             "0",
+#             "--nopreview",
+#             "--codec",
+#             "mjpeg",
+#             "--width",
+#             str(width),
+#             "--height",
+#             str(height),
+#             "--framerate",
+#             str(framerate),
+#             "-o",
+#             "-",
+#         ]
+
+#         self.proc = subprocess.Popen(
+#             cmd,
+#             stdout=subprocess.PIPE,
+#             stderr=subprocess.DEVNULL,
+#             bufsize=0,
+#         )
+
+#         if self.proc.stdout is None:
+#             raise RuntimeError("failed to open rpicam-vid stdout pipe")
+
+#         self.thread = threading.Thread(target=self._reader_loop, daemon=True)
+#         self.thread.start()
+
+#     def _reader_loop(self):
+#         while self.alive:
+#             chunk = self.proc.stdout.read(4096)
+#             if not chunk:
+#                 break
+
+#             self.buffer.extend(chunk)
+
+#             frames = []
+#             search_pos = 0
+
+#             while True:
+#                 start = self.buffer.find(b"\xff\xd8", search_pos)
+#                 if start == -1:
+#                     break
+
+#                 end = self.buffer.find(b"\xff\xd9", start + 2)
+#                 if end == -1:
+#                     break
+
+#                 frames.append((start, end + 2))
+#                 search_pos = end + 2
+
+#             if not frames:
+#                 if len(self.buffer) > 2 * 1024 * 1024:
+#                     self.buffer = self.buffer[-65536:]
+#                 continue
+
+#             # 가장 최신 완성 프레임만 사용
+#             last_start, last_end = frames[-1]
+#             jpg = self.buffer[last_start:last_end]
+
+#             # 마지막 프레임 뒤 데이터만 남김
+#             self.buffer = self.buffer[last_end:]
+
+#             arr = np.frombuffer(jpg, dtype=np.uint8)
+#             frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+
+#             # debugging
+#             rx_done = time.monotonic()
+
+#             if frame is None:
+#                 continue
+
+#             with self.lock:
+#                 self.latest_frame = frame
+#                 # debbugging
+#                 self.latest_frame_id += 1
+#                 self.latest_rx_done_mono = rx_done
+#                 self.latest_decode_done_mono = rx_done
+
+#     def read(self, wait_timeout=2.0):
+#         deadline = time.monotonic() + wait_timeout
+
+#         while self.alive and time.monotonic() < deadline:
+#             with self.lock:
+#                 if self.latest_frame is not None:
+#                     # return True, self.latest_frame.copy()
+#                     # debugging
+#                     return True, {
+#                         "frame": self.latest_frame.copy(),
+#                         "frame_id": self.latest_frame_id,
+#                         "rx_done_mono": self.latest_rx_done_mono,
+#                         "decode_done_mono": self.latest_decode_done_mono,
+#                     }
+#             time.sleep(0.01)
+
+#         return False, None
+
+#     def release(self):
+#         self.alive = False
+#         try:
+#             if self.proc.poll() is None:
+#                 self.proc.terminate()
+#                 self.proc.wait(timeout=2.0)
+#         except Exception:
+#             try:
+#                 self.proc.kill()
+#             except Exception:
+#                 pass
 
 
 @dataclass
@@ -1432,40 +1599,196 @@ class DualModelRunner:
 
         self.fsm = IntersectionFSM()
 
-    def step(self) -> Optional[DualInferenceResult]:
-        if self.use_rpicam:
-            ok, frame = self.cam.read()
-        else:
-            ok, frame = self.cap.read()
 
+def step(self) -> Optional[DualInferenceResult]:
+    step_start_mono = time.monotonic()
+
+    if self.use_rpicam:
+        ok, cam_data = self.cam.read(wait_timeout=2.0)
         if not ok:
             return None
 
-        H, W = frame.shape[:2]
+        frame = cam_data["frame"]
+        frame_id = cam_data["frame_id"]
+        rx_done_mono = cam_data["rx_done_mono"]
+    else:
+        ok, frame = self.cap.read()
+        if not ok:
+            return None
 
-        lane_outs, _ = self.lane_eng.infer(frame)
-        lane_shapes = parse_lane(lane_outs, H, W)
-        p_le, p_ls = compute_lane_error(lane_shapes)
-        (p_is, p_it), _ = self.fsm.update(lane_shapes)
-        print(
-            "[DEBUG] lane_shapes:",
-            [(s["class_name"], round(s["conf"], 3)) for s in lane_shapes],
-        )
-        # print(f"[DEBUG] p_ls={p_ls}, p_is={p_is}, p_it={p_it}")
+        frame_id = None
+        rx_done_mono = None
 
-        obs_outs, _ = self.obs_eng.infer(frame)
-        obs_list = parse_obstacle(obs_outs, H, W)
+    H, W = frame.shape[:2]
 
-        line_id, angle = convert_lane_result(p_le, p_ls, p_is, p_it)
-        obj_id = convert_object_result(obs_list)
+    lane_outs, lane_ms = self.lane_eng.infer(frame)
+    obs_outs, obs_ms = self.obs_eng.infer(frame)
 
-        return DualInferenceResult(
-            line_id=line_id,
-            angle=angle,
-            obj_id=obj_id,
-            lane_status=p_ls,
-            inter_type=p_it if p_is else None,
-        )
+    print(
+        f"[RAW] lane_out0_shape={lane_outs[0].shape if lane_outs else None}, "
+        f"obs_out0_shape={obs_outs[0].shape if obs_outs else None}"
+    )
+
+    lane_shapes = parse_lane(lane_outs, H, W)
+    obs_list = parse_obstacle(obs_outs, H, W)
+
+    print(
+        "[DEBUG] lane_shapes:",
+        [(s["class_name"], round(s["conf"], 3)) for s in lane_shapes],
+    )
+    print(
+        "[DEBUG] obs_list:", [(o["class_name"], round(o["conf"], 3)) for o in obs_list]
+    )
+
+    p_le, p_ls = compute_lane_error(lane_shapes)
+    (p_is, p_it), raw_inter = self.fsm.update(lane_shapes)
+
+    line_id, angle = convert_lane_result(p_le, p_ls, p_is, p_it)
+    obj_id = convert_object_result(obs_list)
+
+    step_end_mono = time.monotonic()
+
+    frame_age_start = None
+    frame_age_end = None
+    if rx_done_mono is not None:
+        frame_age_start = step_start_mono - rx_done_mono
+        frame_age_end = step_end_mono - rx_done_mono
+
+    timing_msg = (
+        f"[TIMING] step_dt={step_end_mono - step_start_mono:.3f}s "
+        f"lane_ms={lane_ms:.1f}ms "
+        f"obs_ms={obs_ms:.1f}ms"
+    )
+
+    if frame_id is not None:
+        timing_msg += f" frame_id={frame_id}"
+    if frame_age_start is not None:
+        timing_msg += f" frame_age_start={frame_age_start:.3f}s"
+    if frame_age_end is not None:
+        timing_msg += f" frame_age_end={frame_age_end:.3f}s"
+
+    print(timing_msg)
+
+    print(
+        f"[CONVERT] p_le={p_le:.4f}, p_ls={p_ls}, "
+        f"p_is={p_is}, p_it={p_it}, raw_inter={raw_inter}, "
+        f"line_id={line_id}, angle={angle}, obj_id={obj_id}"
+    )
+
+    # 입력 프레임 저장 1회
+    if not hasattr(self, "_debug_saved"):
+        cv2.imwrite("/tmp/debug_input_frame.jpg", frame)
+        self._debug_saved = True
+        print("[DEBUG] saved /tmp/debug_input_frame.jpg")
+
+    # 박스 시각화 프레임 저장 1회
+    if not hasattr(self, "_debug_vis_saved"):
+        vis = frame.copy()
+
+        for s in lane_shapes:
+            x1, y1, x2, y2 = s["bbox"]
+            cv2.rectangle(vis, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.putText(
+                vis,
+                f'{s["class_name"]} {s["conf"]:.2f}',
+                (x1, max(15, y1 - 5)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                (0, 255, 0),
+                1,
+            )
+
+        for o in obs_list:
+            x1, y1, x2, y2 = o["bbox"]
+            cv2.rectangle(vis, (x1, y1), (x2, y2), (0, 0, 255), 2)
+            cv2.putText(
+                vis,
+                f'{o["class_name"]} {o["conf"]:.2f}',
+                (x1, max(15, y1 - 5)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                (0, 0, 255),
+                1,
+            )
+
+        cv2.imwrite("/tmp/debug_vis_frame.jpg", vis)
+        self._debug_vis_saved = True
+        print("[DEBUG] saved /tmp/debug_vis_frame.jpg")
+
+    return DualInferenceResult(
+        line_id=line_id,
+        angle=angle,
+        obj_id=obj_id,
+        lane_status=p_ls,
+        inter_type=p_it if p_is else None,
+    )
+
+    # def step(self) -> Optional[DualInferenceResult]:
+    #     # debugging
+    #     if self.use_rpicam:
+    #         ok, frame = self.cam.read()
+    #         #debugging
+    #     else:
+    #         ok, frame = self.cap.read()
+
+    #     if not ok:
+    #         return None
+
+    #     H, W = frame.shape[:2]
+
+    #     lane_outs, _ = self.lane_eng.infer(frame)
+    #     lane_shapes = parse_lane(lane_outs, H, W)
+    #     print(
+    #         f"[RAW] lane_out0_shape={lane_outs[0].shape if lane_outs else None}, obs_out0_shape={obs_outs[0].shape if obs_outs else None}"
+    #     )
+
+    #     p_le, p_ls = compute_lane_error(lane_shapes)
+    #     (p_is, p_it), _ = self.fsm.update(lane_shapes)
+    #     print(
+    #         "[DEBUG] lane_shapes:",
+    #         [(s["class_name"], round(s["conf"], 3)) for s in lane_shapes],
+    #     )
+    #     # print(f"[DEBUG] p_ls={p_ls}, p_is={p_is}, p_it={p_it}")
+
+    #     obs_outs, _ = self.obs_eng.infer(frame)
+    #     obs_list = parse_obstacle(obs_outs, H, W)
+
+    #     line_id, angle = convert_lane_result(p_le, p_ls, p_is, p_it)
+    #     obj_id = convert_object_result(obs_list)
+    #     # 2) parsed result
+    #     print(
+    #         "[PARSED] lane_shapes=",
+    #         [
+    #             {
+    #                 "name": s["class_name"],
+    #                 "conf": round(s["conf"], 3),
+    #                 "cx": round(s["cx_norm"], 3),
+    #                 "cy": round(s["cy_norm"], 3),
+    #                 "bbox": s["bbox"],
+    #             }
+    #             for s in lane_shapes
+    #         ],
+    #     )
+    #     print(
+    #         "[PARSED] obs_list=",
+    #         [
+    #             {
+    #                 "name": o["class_name"],
+    #                 "conf": round(o["conf"], 3),
+    #                 "bbox": o["bbox"],
+    #                 "area": o["area"],
+    #             }
+    #             for o in obs_list
+    #         ],
+    #     )
+
+    #     return DualInferenceResult(
+    #         line_id=line_id,
+    #         angle=angle,
+    #         obj_id=obj_id,
+    #         lane_status=p_ls,
+    #         inter_type=p_it if p_is else None,
+    #     )
 
     def close(self):
         try:
