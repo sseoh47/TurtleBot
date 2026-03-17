@@ -165,7 +165,7 @@ class LDS02:
             return 0
         d1 = self.is_object_in_range(45, 90, 400)
         d2 = self.is_object_in_range(90, 100, 350)
-        d3 = self.is_object_in_range(-15, 0, 200)
+        d3 = self.is_object_in_range(-15, 15, 200)
         d4 = self.is_object_in_range(-15, 15, 200)
 
         m1 = self.get_min_distance(45, 90)
