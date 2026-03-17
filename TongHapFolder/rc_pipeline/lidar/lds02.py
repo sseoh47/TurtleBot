@@ -40,7 +40,7 @@ class LDS02:
         conf_min=50,
         dist_min=100,
         dist_max=1000,
-        valid_time=0.2,
+        valid_time=0.5,  # 기존 = 0.2
     ):
         self.ser = serial.Serial(port, baudrate=baud, timeout=timeout)
         self.ranges = [None] * 360
