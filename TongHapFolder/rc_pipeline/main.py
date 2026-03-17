@@ -5,6 +5,15 @@ import termios
 import tty
 from pathlib import Path
 
+## 모델 돌리기 위한 import들
+from domain.types import FinalCommand
+from decision.signal import signal_det
+from lidar.lds02 import LDS02
+from comm.arduino_serial import ArduinoSerial
+
+# from dual_model_edgetpu_v6 import DualModelRunner
+from vision.runner import DualModelRunner
+
 ROOT_DIR = Path(__file__).resolve().parent
 PROJECT_PARENT = ROOT_DIR.parent
 TOP_DIR = PROJECT_PARENT.parent
@@ -34,11 +43,6 @@ from config import (
     LIDAR_DIST_MAX,
     LIDAR_VALID_TIME,
 )
-from domain.types import FinalCommand
-from decision.signal import signal_det
-from lidar.lds02 import LDS02
-from comm.arduino_serial import ArduinoSerial
-from dual_model_edgetpu_v6 import DualModelRunner
 
 
 def get_key_nonblock():
@@ -103,10 +107,19 @@ def main():
             ## debug
             loop_t0 = time.monotonic()
             result = runner.step()
-            print(f"[LOOP] dt={time.monotonic() - loop_t0:.3f}s")
             if result is None:
-                print("\n[INFO] inference result is None, stop.")
+                print("[INFO] inference result is None, stop.")
                 break
+
+            if DEBUG:
+                print(
+                    f"[VISION] line={result.line_id}, obj={result.obj_id}, "
+                    f"lane_status={result.lane_status}, inter={result.inter_type}, "
+                    f"step_dt={result.step_dt:.3f}s, "
+                    f"frame_age_end={result.frame_age_end:.3f}s"
+                    if result.frame_age_end is not None
+                    else f"[VISION] line={result.line_id}, obj={result.obj_id}"
+                )
 
             start_signal = time.monotonic() < start_signal_until
             # lidar_action = lidar.check_action()
