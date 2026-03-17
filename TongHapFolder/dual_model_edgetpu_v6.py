@@ -1599,129 +1599,129 @@ class DualModelRunner:
 
         self.fsm = IntersectionFSM()
 
+    def step(self) -> Optional[DualInferenceResult]:
+        step_start_mono = time.monotonic()
 
-def step(self) -> Optional[DualInferenceResult]:
-    step_start_mono = time.monotonic()
+        if self.use_rpicam:
+            ok, cam_data = self.cam.read(wait_timeout=2.0)
+            if not ok:
+                return None
 
-    if self.use_rpicam:
-        ok, cam_data = self.cam.read(wait_timeout=2.0)
-        if not ok:
-            return None
+            frame = cam_data["frame"]
+            frame_id = cam_data["frame_id"]
+            rx_done_mono = cam_data["rx_done_mono"]
+        else:
+            ok, frame = self.cap.read()
+            if not ok:
+                return None
 
-        frame = cam_data["frame"]
-        frame_id = cam_data["frame_id"]
-        rx_done_mono = cam_data["rx_done_mono"]
-    else:
-        ok, frame = self.cap.read()
-        if not ok:
-            return None
+            frame_id = None
+            rx_done_mono = None
 
-        frame_id = None
-        rx_done_mono = None
+        H, W = frame.shape[:2]
 
-    H, W = frame.shape[:2]
+        lane_outs, lane_ms = self.lane_eng.infer(frame)
+        obs_outs, obs_ms = self.obs_eng.infer(frame)
 
-    lane_outs, lane_ms = self.lane_eng.infer(frame)
-    obs_outs, obs_ms = self.obs_eng.infer(frame)
+        print(
+            f"[RAW] lane_out0_shape={lane_outs[0].shape if lane_outs else None}, "
+            f"obs_out0_shape={obs_outs[0].shape if obs_outs else None}"
+        )
 
-    print(
-        f"[RAW] lane_out0_shape={lane_outs[0].shape if lane_outs else None}, "
-        f"obs_out0_shape={obs_outs[0].shape if obs_outs else None}"
-    )
+        lane_shapes = parse_lane(lane_outs, H, W)
+        obs_list = parse_obstacle(obs_outs, H, W)
 
-    lane_shapes = parse_lane(lane_outs, H, W)
-    obs_list = parse_obstacle(obs_outs, H, W)
+        print(
+            "[DEBUG] lane_shapes:",
+            [(s["class_name"], round(s["conf"], 3)) for s in lane_shapes],
+        )
+        print(
+            "[DEBUG] obs_list:",
+            [(o["class_name"], round(o["conf"], 3)) for o in obs_list],
+        )
 
-    print(
-        "[DEBUG] lane_shapes:",
-        [(s["class_name"], round(s["conf"], 3)) for s in lane_shapes],
-    )
-    print(
-        "[DEBUG] obs_list:", [(o["class_name"], round(o["conf"], 3)) for o in obs_list]
-    )
+        p_le, p_ls = compute_lane_error(lane_shapes)
+        (p_is, p_it), raw_inter = self.fsm.update(lane_shapes)
 
-    p_le, p_ls = compute_lane_error(lane_shapes)
-    (p_is, p_it), raw_inter = self.fsm.update(lane_shapes)
+        line_id, angle = convert_lane_result(p_le, p_ls, p_is, p_it)
+        obj_id = convert_object_result(obs_list)
 
-    line_id, angle = convert_lane_result(p_le, p_ls, p_is, p_it)
-    obj_id = convert_object_result(obs_list)
+        step_end_mono = time.monotonic()
 
-    step_end_mono = time.monotonic()
+        frame_age_start = None
+        frame_age_end = None
+        if rx_done_mono is not None:
+            frame_age_start = step_start_mono - rx_done_mono
+            frame_age_end = step_end_mono - rx_done_mono
 
-    frame_age_start = None
-    frame_age_end = None
-    if rx_done_mono is not None:
-        frame_age_start = step_start_mono - rx_done_mono
-        frame_age_end = step_end_mono - rx_done_mono
+        timing_msg = (
+            f"[TIMING] step_dt={step_end_mono - step_start_mono:.3f}s "
+            f"lane_ms={lane_ms:.1f}ms "
+            f"obs_ms={obs_ms:.1f}ms"
+        )
 
-    timing_msg = (
-        f"[TIMING] step_dt={step_end_mono - step_start_mono:.3f}s "
-        f"lane_ms={lane_ms:.1f}ms "
-        f"obs_ms={obs_ms:.1f}ms"
-    )
+        if frame_id is not None:
+            timing_msg += f" frame_id={frame_id}"
+        if frame_age_start is not None:
+            timing_msg += f" frame_age_start={frame_age_start:.3f}s"
+        if frame_age_end is not None:
+            timing_msg += f" frame_age_end={frame_age_end:.3f}s"
 
-    if frame_id is not None:
-        timing_msg += f" frame_id={frame_id}"
-    if frame_age_start is not None:
-        timing_msg += f" frame_age_start={frame_age_start:.3f}s"
-    if frame_age_end is not None:
-        timing_msg += f" frame_age_end={frame_age_end:.3f}s"
+        print(timing_msg)
 
-    print(timing_msg)
+        print(
+            f"[CONVERT] p_le={p_le:.4f}, p_ls={p_ls}, "
+            f"p_is={p_is}, p_it={p_it}, raw_inter={raw_inter}, "
+            f"line_id={line_id}, angle={angle}, obj_id={obj_id}"
+        )
 
-    print(
-        f"[CONVERT] p_le={p_le:.4f}, p_ls={p_ls}, "
-        f"p_is={p_is}, p_it={p_it}, raw_inter={raw_inter}, "
-        f"line_id={line_id}, angle={angle}, obj_id={obj_id}"
-    )
+        # 입력 프레임 저장 1회
+        if not hasattr(self, "_debug_saved"):
+            cv2.imwrite("/tmp/debug_input_frame.jpg", frame)
+            self._debug_saved = True
+            print("[DEBUG] saved /tmp/debug_input_frame.jpg")
 
-    # 입력 프레임 저장 1회
-    if not hasattr(self, "_debug_saved"):
-        cv2.imwrite("/tmp/debug_input_frame.jpg", frame)
-        self._debug_saved = True
-        print("[DEBUG] saved /tmp/debug_input_frame.jpg")
+        # 박스 시각화 프레임 저장 1회
+        if not hasattr(self, "_debug_vis_saved"):
+            vis = frame.copy()
 
-    # 박스 시각화 프레임 저장 1회
-    if not hasattr(self, "_debug_vis_saved"):
-        vis = frame.copy()
+            for s in lane_shapes:
+                x1, y1, x2, y2 = s["bbox"]
+                cv2.rectangle(vis, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                cv2.putText(
+                    vis,
+                    f'{s["class_name"]} {s["conf"]:.2f}',
+                    (x1, max(15, y1 - 5)),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    (0, 255, 0),
+                    1,
+                )
 
-        for s in lane_shapes:
-            x1, y1, x2, y2 = s["bbox"]
-            cv2.rectangle(vis, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            cv2.putText(
-                vis,
-                f'{s["class_name"]} {s["conf"]:.2f}',
-                (x1, max(15, y1 - 5)),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.5,
-                (0, 255, 0),
-                1,
-            )
+            for o in obs_list:
+                x1, y1, x2, y2 = o["bbox"]
+                cv2.rectangle(vis, (x1, y1), (x2, y2), (0, 0, 255), 2)
+                cv2.putText(
+                    vis,
+                    f'{o["class_name"]} {o["conf"]:.2f}',
+                    (x1, max(15, y1 - 5)),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    (0, 0, 255),
+                    1,
+                )
 
-        for o in obs_list:
-            x1, y1, x2, y2 = o["bbox"]
-            cv2.rectangle(vis, (x1, y1), (x2, y2), (0, 0, 255), 2)
-            cv2.putText(
-                vis,
-                f'{o["class_name"]} {o["conf"]:.2f}',
-                (x1, max(15, y1 - 5)),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.5,
-                (0, 0, 255),
-                1,
-            )
+            cv2.imwrite("/tmp/debug_vis_frame.jpg", vis)
+            self._debug_vis_saved = True
+            print("[DEBUG] saved /tmp/debug_vis_frame.jpg")
 
-        cv2.imwrite("/tmp/debug_vis_frame.jpg", vis)
-        self._debug_vis_saved = True
-        print("[DEBUG] saved /tmp/debug_vis_frame.jpg")
-
-    return DualInferenceResult(
-        line_id=line_id,
-        angle=angle,
-        obj_id=obj_id,
-        lane_status=p_ls,
-        inter_type=p_it if p_is else None,
-    )
+        return DualInferenceResult(
+            line_id=line_id,
+            angle=angle,
+            obj_id=obj_id,
+            lane_status=p_ls,
+            inter_type=p_it if p_is else None,
+        )
 
     # def step(self) -> Optional[DualInferenceResult]:
     #     # debugging
