@@ -101,6 +101,7 @@ def main():
 
         last_send_time = 0.0
         start_signal_until = 0.0
+        lidar_ignore_until = time.monotonic() + 5.0
 
         while True:
             key = get_key_nonblock()
@@ -127,9 +128,17 @@ def main():
                     else f"[VISION] line={result.line_id}, obj={result.obj_id}"
                 )
 
-            start_signal = time.monotonic() < start_signal_until
-            lidar_action = lidar.check_action()
+            # start_signal = time.monotonic() < start_signal_until
+            # lidar_action = lidar.check_action()
             # lidar_action = 0
+            ## debug ##
+            now = time.monotonic()
+            start_signal = now < start_signal_until
+
+            if now < lidar_ignore_until:
+                lidar_action = 0
+            else:
+                lidar_action = lidar.check_action()
 
             final_class, final_angle, final_action = signal_det(
                 obj_id=result.obj_id,

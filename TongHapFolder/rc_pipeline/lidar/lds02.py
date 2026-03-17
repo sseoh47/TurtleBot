@@ -172,10 +172,10 @@ class LDS02:
         m2 = self.get_min_distance(90, 100)
         m3 = self.get_min_distance(-15, 0)
         m4 = self.get_min_distance(-15, 15)
+        # debug
+        # print(f"[LIDAR] stage={self.stage} m1={m1} m2={m2} m3={m3} m4={m4}")
 
-        print(f"[LIDAR] stage={self.stage} m1={m1} m2={m2} m3={m3} m4={m4}")
-
-        print(f"[LIDAR] stage={self.stage} d1={d1} d2={d2} d3={d3} d4={d4}")
+        # print(f"[LIDAR] stage={self.stage} d1={d1} d2={d2} d3={d3} d4={d4}")
 
         if self.stage == 0:
             if self.is_object_in_range(45, 90, 400):
