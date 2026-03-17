@@ -237,12 +237,6 @@ void handleSpecialTarget(int classId, float angle, int action)
     if (driveMode == MODE_ROUTINE || driveMode == MODE_LOGISTICIn )
         return;
 
-    // if (action != 2)
-    // {
-    //     slowActionActive = false;
-    //     slowActionDone = false;
-    // }
-
     if (action != 3)
     {
         slowActionActive = false;
@@ -256,35 +250,7 @@ void handleSpecialTarget(int classId, float angle, int action)
             break;
 
         case 2:
-            // action2 : 좌측 90도 회전(시간 기반)
-            // 정지 + 90도 + 서행직진(angle=0)
-            // if (!rotateActionActive && !rotateActionDone)
-            // {
-            //     rotateActionActive = true;
-            //     rotateActionStart = millis();
-            //     executeBaseAction(ACT_STOP, 0.0f);
-            // }
-            // if (rotateActionActive)
-            // {
-                // if (millis() - rotateActionStart < ROTATE_90_MS) // ROTATE_90_MS==2000
-                // {
             executeBaseAction(ACT_ROTATE_L, 0.0f);
-                // }
-                // else if (millis() - rotateActionStart < ROTATE_90_MS+500) // ROTATE_90_MS==2500 -> 약 500ms동안 정지
-                // {
-                //     executeBaseAction(ACT_STOP, 0.0f);
-                // }
-            //     else
-            //     {
-            //         rotateActionActive = false;
-            //         rotateActionDone = true;
-            //     }
-            // }
-            // else if (rotateActionDone)
-            // {
-            //     rotateActionActive = false;
-            //     executeBaseAction(ACT_SLOW, 0);
-            // }
             break;
             
         case 3:
@@ -305,7 +271,6 @@ void handleSpecialTarget(int classId, float angle, int action)
 
 
         case 4:
-        case 9:
             slowActionActive = false;
             // action4 : 정면 근접 정지
             executeBaseAction(ACT_STOP, 0.0f);
