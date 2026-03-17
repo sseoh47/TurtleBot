@@ -177,24 +177,43 @@ class LDS02:
 
         # print(f"[LIDAR] stage={self.stage} d1={d1} d2={d2} d3={d3} d4={d4}")
 
-        if self.stage == 0:
-            if self.is_object_in_range(45, 90, 400):
-                self.stage = 1
-                return 1
+        # if self.stage == 0:
+        #     if self.is_object_in_range(45, 90, 400):
+        #         self.stage = 1
+        #         return 1
 
-        elif self.stage == 1:
-            if self.is_object_in_range(80, 110, 350):
-                self.stage = 2
-                return 2
+        # elif self.stage == 1:
+        #     if self.is_object_in_range(80, 110, 350):
+        #         self.stage = 2
+        #         return 2
 
+        # elif self.stage == 2:
+        #     if self.is_object_in_range(345, 10, 200):
+        #         self.stage = 3
+        #         return 3
+
+        # elif self.stage == 3:
+        #     if self.is_object_in_range(-15, 15, 200):
+        #         self.stage = 0
+        #         return 4
+
+        if self.stage == 0 and d1:
+            self.stage = 1
+        elif self.stage == 1 and d2:
+            self.stage = 2
+        elif self.stage == 2 and d3:
+            self.stage = 3
+        elif self.stage == 3 and d4:
+            self.stage = 4
+
+        if self.stage == 1:
+            return 1
         elif self.stage == 2:
-            if self.is_object_in_range(345, 10, 200):
-                self.stage = 3
-                return 3
-
+            return 2
         elif self.stage == 3:
-            if self.is_object_in_range(-15, 15, 200):
-                self.stage = 0
-                return 4
+            return 3
+        elif self.stage == 4:
+            self.stage = 0
+            return 4
 
         return 0
