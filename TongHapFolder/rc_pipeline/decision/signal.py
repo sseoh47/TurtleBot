@@ -48,6 +48,6 @@ def signal_det(
         return line_id, None, 0
 
     if line_id == 1:
-        return 1, angle, 0
+        return 1, angle, lidar_action
 
-    return 0, None, 0
+    return 0, None, lidar_action
