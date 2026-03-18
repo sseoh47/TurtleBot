@@ -78,7 +78,7 @@ TimedAction logisticsRoutineIn[] =
     {ACT_ROTATE_R, 0.0f, 2450, 0.0f},
     {ACT_FORWARD, 0.0f, 2500, -10.0f},
     {ACT_ROTATE_R, 0.0f, 2450, 0.0f},
-    {ACT_REVERSE, 0.0f, 2500, -10.0f},
+    {ACT_REVERSE, 0.0f, 3000, -10.0f},
     {ACT_STOP,    0.0f,    0}
 };
 
@@ -99,7 +99,7 @@ const int logisticsRoutineOutLength =
 // ================= 물류X PASS 루틴 =================
 TimedAction logisticsRoutinePASS[] =
 {
-    {ACT_REVERSE, 0.0f, 1000, -10.0f},
+    {ACT_REVERSE, 0.0f, 500, -10.0f},
     {ACT_ROTATE_R, 0.0f, 2450, 0.0f},
     {ACT_STOP,    0.0f,    0}
 };
@@ -111,9 +111,9 @@ const int logisticsRoutinePASSLength =
 TimedAction parkingRoutine[] =
 {
     {ACT_ROTATE_L, 0.0f, 2450, 0.0f},
-    {ACT_FORWARD, 0.0f, 3000, -10.0f},
+    {ACT_FORWARD, 0.0f, 3500, -10.0f},
     {ACT_ROTATE_L, 0.0f, 2450, 0.0f},
-    {ACT_REVERSE, 0.0f, 4000, -10.0f},
+    {ACT_REVERSE, 0.0f, 4500, -10.0f},
     {ACT_STOP,    0.0f,    0}
 };
 
@@ -283,6 +283,8 @@ void handleSpecialTarget(int classId, float angle, int action)
                 startRoutine(parkingRoutine, parkingRoutineLength);
             else if (classId == 10)
                 startRoutine(logisticsRoutinePASS, logisticsRoutinePASSLength);
+            else
+                executeBaseAction(ACT_REVERSE, 0.0f);
             break;
 
         default:

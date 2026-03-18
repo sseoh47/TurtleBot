@@ -78,6 +78,8 @@ void initDrive();
 void updateStartupRoutine();
 
 // ================= 일반 주행 처리 =================
+float normalizeLineAngle(float rawAngle);
+
 void handleLineLost();
 void handleLineFollow(float angle);
 // void handleStraight(float angle);
