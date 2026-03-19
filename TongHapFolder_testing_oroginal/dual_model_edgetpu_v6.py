@@ -1558,7 +1558,7 @@ def convert_object_result(obs_list):
 
 class DualModelRunner:
     """
-    dual_model_edgetpu_v6.py를 외부 main.py에서 import해서 쓰기 위한 래퍼
+    dual_model_edgetpu_v6_origin.py를 외부 main.py에서 import해서 쓰기 위한 래퍼
     """
 
     def __init__(

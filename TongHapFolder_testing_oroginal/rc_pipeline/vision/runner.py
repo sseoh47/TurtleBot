@@ -8,7 +8,7 @@ import cv2
 from vision.camera import RPiMJPEGCamera
 from vision.postprocess import convert_lane_result, convert_object_result
 
-from dual_model_edgetpu_v6 import (
+from dual_model_edgetpu_v6_origin import (
     EdgeTPUEngine,
     parse_lane,
     parse_obstacle,
@@ -36,11 +36,11 @@ class DualModelRunner:
     """
     프로젝트 전용 듀얼 모델 래퍼
 
-    방향:
-    - 카메라에서 raw frame 획득
-    - lane / obs 입력을 각각 320x320으로 생성
-    - 디버깅용 raw / lane_input / obs_input 저장
-    - parse에는 원본 해상도(raw_h, raw_w)를 그대로 넘김
+    기능:
+    - PiCamera MJPEG 프레임 수신
+    - 모델 입력 320x320 resize
+    - 디버깅용 raw / lane_input / obs_input 이미지 저장
+    - 저장은 세트 기준 최대 max_debug_saves번만 수행
     """
 
     def __init__(
@@ -58,26 +58,21 @@ class DualModelRunner:
         debug_dir="debug_frames",
         debug_save_interval=10,
         max_debug_saves=20,
-        lane_use_rgb=False,
-        obs_use_rgb=False,
     ):
         self.coral = coral
         self.use_rpicam = False
 
-        self.model_input_w = int(model_input_size[0])
-        self.model_input_h = int(model_input_size[1])
+        self.model_input_w = model_input_size[0]
+        self.model_input_h = model_input_size[1]
 
         self.save_debug_frames = save_debug_frames
         self.debug_dir = Path(debug_dir)
         self.debug_save_interval = max(1, int(debug_save_interval))
-        self.max_debug_saves = max(0, int(max_debug_saves))
-        self.saved_debug_count = 0
         self.debug_counter = 0
 
-        self.lane_use_rgb = lane_use_rgb
-        self.obs_use_rgb = obs_use_rgb
-
-        self._printed_input_info = False
+        # 저장 세트 수 제한
+        self.max_debug_saves = max(0, int(max_debug_saves))
+        self.saved_debug_count = 0
 
         if self.save_debug_frames:
             self.debug_dir.mkdir(parents=True, exist_ok=True)
@@ -107,26 +102,28 @@ class DualModelRunner:
 
         self.fsm = IntersectionFSM()
 
-    def _resize_for_model(self, frame):
-        return cv2.resize(
+    def _build_model_input(self, frame):
+        """
+        모델에 실제 넣을 320x320 입력 이미지 생성
+        현재는 단순 resize만 수행
+        """
+        model_input = cv2.resize(
             frame,
             (self.model_input_w, self.model_input_h),
             interpolation=cv2.INTER_LINEAR,
         )
-
-    def _prepare_lane_input(self, raw_frame):
-        x = self._resize_for_model(raw_frame)
-        if self.lane_use_rgb:
-            x = cv2.cvtColor(x, cv2.COLOR_BGR2RGB)
-        return x
-
-    def _prepare_obs_input(self, raw_frame):
-        x = self._resize_for_model(raw_frame)
-        if self.obs_use_rgb:
-            x = cv2.cvtColor(x, cv2.COLOR_BGR2RGB)
-        return x
+        return model_input
 
     def _save_debug_images(self, frame_id, raw_frame, lane_input, obs_input):
+        """
+        디버깅용 이미지 저장
+        - raw: 카메라 원본
+        - lane_input: lane 모델에 넣은 320x320 이미지
+        - obs_input: obstacle 모델에 넣은 320x320 이미지
+
+        저장은 debug_save_interval 주기마다 수행하며,
+        최대 max_debug_saves 세트까지만 저장한다.
+        """
         if not self.save_debug_frames:
             return
 
@@ -134,6 +131,7 @@ class DualModelRunner:
             return
 
         self.debug_counter += 1
+
         if self.debug_counter % self.debug_save_interval != 0:
             return
 
@@ -144,18 +142,9 @@ class DualModelRunner:
         lane_path = self.debug_dir / "lane_input" / f"frame_{fid}_{ts_ms}.jpg"
         obs_path = self.debug_dir / "obs_input" / f"frame_{fid}_{ts_ms}.jpg"
 
-        # 저장은 보기 쉽게 BGR로 맞춤
-        lane_save = lane_input
-        obs_save = obs_input
-
-        if self.lane_use_rgb:
-            lane_save = cv2.cvtColor(lane_input, cv2.COLOR_RGB2BGR)
-        if self.obs_use_rgb:
-            obs_save = cv2.cvtColor(obs_input, cv2.COLOR_RGB2BGR)
-
         ok_raw = cv2.imwrite(str(raw_path), raw_frame)
-        ok_lane = cv2.imwrite(str(lane_path), lane_save)
-        ok_obs = cv2.imwrite(str(obs_path), obs_save)
+        ok_lane = cv2.imwrite(str(lane_path), lane_input)
+        ok_obs = cv2.imwrite(str(obs_path), obs_input)
 
         if ok_raw and ok_lane and ok_obs:
             self.saved_debug_count += 1
@@ -192,19 +181,11 @@ class DualModelRunner:
             frame_id = None
             rx_done_mono = None
 
-        raw_h, raw_w = raw_frame.shape[:2]
+        # 모델 입력 320x320 생성
+        lane_input = self._build_model_input(raw_frame)
+        obs_input = lane_input.copy()
 
-        lane_input = self._prepare_lane_input(raw_frame)
-        obs_input = self._prepare_obs_input(raw_frame)
-
-        if not self._printed_input_info:
-            print(
-                f"[RUNNER] raw={raw_frame.shape}, "
-                f"lane_input={lane_input.shape}, obs_input={obs_input.shape}, "
-                f"lane_rgb={self.lane_use_rgb}, obs_rgb={self.obs_use_rgb}"
-            )
-            self._printed_input_info = True
-
+        # 디버깅 이미지 저장
         self._save_debug_images(
             frame_id=frame_id,
             raw_frame=raw_frame,
@@ -212,12 +193,15 @@ class DualModelRunner:
             obs_input=obs_input,
         )
 
+        # 실제 추론
         lane_outs, lane_ms = self.lane_eng.infer(lane_input)
         obs_outs, obs_ms = self.obs_eng.infer(obs_input)
 
-        # parse에는 원본 해상도 유지
-        lane_shapes = parse_lane(lane_outs, raw_h, raw_w)
-        obs_list = parse_obstacle(obs_outs, raw_h, raw_w)
+        # 후처리는 현재 모델 입력 크기(320x320) 기준으로 진행
+        in_h, in_w = lane_input.shape[:2]
+
+        lane_shapes = parse_lane(lane_outs, in_h, in_w)
+        obs_list = parse_obstacle(obs_outs, in_h, in_w)
 
         p_le, p_ls = compute_lane_error(lane_shapes)
         (p_is, p_it), _ = self.fsm.update(lane_shapes)

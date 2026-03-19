@@ -23,7 +23,6 @@ class RPiMJPEGCamera:
 
         self.lock = threading.Lock()
         self.alive = True
-        self._printed_first_frame_info = False
 
         cmd = [
             "rpicam-vid",
@@ -95,16 +94,9 @@ class RPiMJPEGCamera:
             self.buffer = self.buffer[last_end:]
 
             arr = np.frombuffer(jpg, dtype=np.uint8)
-            frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+            frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)  ##cpu 사용량 증가 가능성
             if frame is None:
                 continue
-
-            if not self._printed_first_frame_info:
-                print(
-                    f"[CAM] first frame shape={frame.shape}, dtype={frame.dtype}, "
-                    f"target=({self.width}x{self.height}@{self.framerate})"
-                )
-                self._printed_first_frame_info = True
 
             rx_done = time.monotonic()
 
@@ -120,7 +112,7 @@ class RPiMJPEGCamera:
             with self.lock:
                 if self.latest_frame is not None:
                     return True, {
-                        "frame": self.latest_frame.copy(),
+                        "frame": self.latest_frame.copy(),  ## 읽는쪽의 빈도가 높으면 누적된다.
                         "frame_id": self.latest_frame_id,
                         "rx_done_mono": self.latest_rx_done_mono,
                     }
