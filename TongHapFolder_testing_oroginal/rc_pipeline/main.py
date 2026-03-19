@@ -110,11 +110,17 @@ def main():
         # 10루프 평균 timing 로그용
         avg_every = 10
         avg_count = 0
+
         sum_step_dt = 0.0
         sum_frame_age_start = 0.0
         sum_frame_age_end = 0.0
+        sum_lane_ms = 0.0
+        sum_obs_ms = 0.0
+
         count_frame_age_start = 0
         count_frame_age_end = 0
+        count_lane_ms = 0
+        count_obs_ms = 0
 
         while True:
             key = get_key_nonblock()
@@ -164,12 +170,22 @@ def main():
 
                 if result.step_dt is not None:
                     sum_step_dt += result.step_dt
+
                 if result.frame_age_start is not None:
                     sum_frame_age_start += result.frame_age_start
                     count_frame_age_start += 1
+
                 if result.frame_age_end is not None:
                     sum_frame_age_end += result.frame_age_end
                     count_frame_age_end += 1
+
+                if result.lane_ms is not None:
+                    sum_lane_ms += result.lane_ms
+                    count_lane_ms += 1
+
+                if result.obs_ms is not None:
+                    sum_obs_ms += result.obs_ms
+                    count_obs_ms += 1
 
                 if avg_count >= avg_every:
                     avg_step_dt = sum_step_dt / avg_count
@@ -183,12 +199,21 @@ def main():
                         if count_frame_age_end > 0
                         else None
                     )
+                    avg_lane_ms = (
+                        sum_lane_ms / count_lane_ms if count_lane_ms > 0 else None
+                    )
+                    avg_obs_ms = sum_obs_ms / count_obs_ms if count_obs_ms > 0 else None
 
                     msg = f"[AVG{avg_every}] step_dt={avg_step_dt:.3f}s"
+
                     if avg_frame_age_start is not None:
                         msg += f", frame_age_start={avg_frame_age_start:.3f}s"
                     if avg_frame_age_end is not None:
                         msg += f", frame_age_end={avg_frame_age_end:.3f}s"
+                    if avg_lane_ms is not None:
+                        msg += f", lane_ms={avg_lane_ms:.1f}ms"
+                    if avg_obs_ms is not None:
+                        msg += f", obs_ms={avg_obs_ms:.1f}ms"
 
                     print(msg)
 
@@ -196,8 +221,12 @@ def main():
                     sum_step_dt = 0.0
                     sum_frame_age_start = 0.0
                     sum_frame_age_end = 0.0
+                    sum_lane_ms = 0.0
+                    sum_obs_ms = 0.0
                     count_frame_age_start = 0
                     count_frame_age_end = 0
+                    count_lane_ms = 0
+                    count_obs_ms = 0
 
             now = time.monotonic()
             if now - last_send_time >= 1.0 / SEND_HZ:
