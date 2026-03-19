@@ -1230,7 +1230,7 @@ class RPiMJPEGCamera:
     항상 최신 프레임 1장만 유지한다.
     """
 
-    def __init__(self, width=640, height=480, framerate=10):
+    def __init__(self, width=640, height=480, framerate=30):
         self.width = width
         self.height = height
         self.framerate = framerate
