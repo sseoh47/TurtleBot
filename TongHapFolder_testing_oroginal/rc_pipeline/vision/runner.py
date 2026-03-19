@@ -247,13 +247,13 @@ class DualModelRunner:
                 f"(raw={ok_raw}, lane={ok_lane}, obs={ok_obs}, frame_id={fid})"
             )
 
-    def _infer_serial(self, frame, H, W):
+    def _infer_serial(self, frame, INF_H, INF_W):
         lane_outs, lane_ms = self.lane_eng.infer(frame)
-        lane_shapes = parse_lane(lane_outs, H, W)
+        lane_shapes = parse_lane(lane_outs, INF_H, INF_W)
 
         if self.step_count % self.obs_interval == 0:
             obs_outs, obs_ms = self.obs_eng.infer(frame)
-            obs_list = parse_obstacle(obs_outs, H, W)
+            obs_list = parse_obstacle(obs_outs, INF_H, INF_W)
             self.prev_obs_list = obs_list
             self.prev_obs_ms = obs_ms
         else:
@@ -262,7 +262,7 @@ class DualModelRunner:
 
         return lane_shapes, lane_ms, obs_list, obs_ms
 
-    def _infer_parallel(self, frame_id, frame, H, W):
+    def _infer_parallel(self, frame_id, frame, INF_H, INF_W):
         # lane은 항상 수행
         self.lane_worker.push(frame_id, frame)
 
@@ -275,14 +275,14 @@ class DualModelRunner:
         if lane_outs is None:
             raise RuntimeError("lane worker timeout")
 
-        lane_shapes = parse_lane(lane_outs, H, W)
+        lane_shapes = parse_lane(lane_outs, INF_H, INF_W)
 
         if run_obs:
             obs_outs, obs_ms = self.obs_worker.get_result_for(frame_id, timeout=2.0)
             if obs_outs is None:
                 raise RuntimeError("obs worker timeout")
 
-            obs_list = parse_obstacle(obs_outs, H, W)
+            obs_list = parse_obstacle(obs_outs, INF_H, INF_W)
             self.prev_obs_list = obs_list
             self.prev_obs_ms = obs_ms
         else:
@@ -313,6 +313,12 @@ class DualModelRunner:
 
         H, W = frame.shape[:2]
 
+        # 모델 입력 해상도 (320x320)
+        # parse_lane/parse_obstacle의 bbox 좌표는 모델 입력 크기 기준으로 역산해야 함
+        # 원본 해상도(H,W)로 역산하면 bbox가 왜곡되어 ROI 필터에 다 걸림
+        INF_H = self.lane_eng.img_h
+        INF_W = self.lane_eng.img_w
+
         if not self._printed_input_info:
             print(
                 f"[RUNNER] raw frame shape={frame.shape}, "
@@ -336,10 +342,10 @@ class DualModelRunner:
 
         if self.parallel_mode:
             lane_shapes, lane_ms, obs_list, obs_ms = self._infer_parallel(
-                frame_id, frame, H, W
+                frame_id, frame, INF_H, INF_W
             )
         else:
-            lane_shapes, lane_ms, obs_list, obs_ms = self._infer_serial(frame, H, W)
+            lane_shapes, lane_ms, obs_list, obs_ms = self._infer_serial(frame, INF_H, INF_W)
 
         p_le, p_ls = compute_lane_error(lane_shapes)
         (p_is, p_it), _ = self.fsm.update(lane_shapes)
