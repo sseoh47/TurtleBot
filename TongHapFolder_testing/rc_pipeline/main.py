@@ -73,7 +73,6 @@ def main():
 
     try:
         # print("[INFO] controls: s=start signal, q=quit")
-
         runner = DualModelRunner(
             lane_model=LANE_MODEL_PATH,
             obs_model=OBS_MODEL_PATH,
@@ -82,13 +81,15 @@ def main():
             use_edgetpu=USE_EDGETPU,
             cam_w=CAM_W,
             cam_h=CAM_H,
+            cam_fps=10,
             model_input_size=(320, 320),
             save_debug_frames=True,
             debug_dir="debug_frames",
             debug_save_interval=10,
             max_debug_saves=20,
+            lane_use_rgb=False,
+            obs_use_rgb=False,
         )
-
         lidar = LDS02(
             port=LIDAR_PORT,
             baud=LIDAR_BAUDRATE,
