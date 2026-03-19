@@ -1,4 +1,4 @@
-##원본
+##원본..근데 뭐에 원본이더라 ㅋ
 import time
 from dataclasses import dataclass
 from typing import Optional

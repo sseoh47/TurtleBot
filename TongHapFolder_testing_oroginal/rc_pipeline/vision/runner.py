@@ -1,4 +1,6 @@
+## 병렬화적용완
 import time
+import threading
 from dataclasses import dataclass
 from typing import Optional
 from pathlib import Path
@@ -32,14 +34,94 @@ class DualInferenceResult:
     obs_ms: Optional[float] = None
 
 
+class InferWorker(threading.Thread):
+    """
+    EdgeTPU 추론 전용 워커
+    push(frame_id, frame) 하면 가장 최신 요청만 유지하고 infer 수행
+    get_result_for(frame_id)로 해당 프레임 결과를 기다려서 가져온다.
+    """
+
+    def __init__(self, engine, name="infer-worker"):
+        super().__init__(daemon=True, name=name)
+        self.engine = engine
+        self.alive = True
+
+        self.req_lock = threading.Lock()
+        self.req_cv = threading.Condition(self.req_lock)
+        self.pending_frame = None
+        self.pending_frame_id = None
+        self.has_request = False
+
+        self.res_lock = threading.Lock()
+        self.res_cv = threading.Condition(self.res_lock)
+        self.last_result_frame_id = None
+        self.last_outs = None
+        self.last_ms = None
+
+    def push(self, frame_id, frame):
+        with self.req_cv:
+            self.pending_frame_id = frame_id
+            self.pending_frame = frame
+            self.has_request = True
+            self.req_cv.notify()
+
+    def get_result_for(self, frame_id, timeout=2.0):
+        deadline = time.monotonic() + timeout
+        with self.res_cv:
+            while self.alive:
+                if self.last_result_frame_id == frame_id:
+                    return self.last_outs, self.last_ms
+
+                remain = deadline - time.monotonic()
+                if remain <= 0:
+                    return None, None
+                self.res_cv.wait(timeout=remain)
+
+        return None, None
+
+    def run(self):
+        while self.alive:
+            with self.req_cv:
+                while self.alive and not self.has_request:
+                    self.req_cv.wait(timeout=0.5)
+
+                if not self.alive:
+                    break
+
+                frame_id = self.pending_frame_id
+                frame = self.pending_frame
+                self.has_request = False
+
+            if frame is None:
+                continue
+
+            outs, ms = self.engine.infer(frame)
+
+            with self.res_cv:
+                self.last_result_frame_id = frame_id
+                self.last_outs = outs
+                self.last_ms = ms
+                self.res_cv.notify_all()
+
+    def stop(self):
+        self.alive = False
+        with self.req_cv:
+            self.req_cv.notify_all()
+        with self.res_cv:
+            self.res_cv.notify_all()
+
+
 class DualModelRunner:
     """
     기존에 잘 되던 dual_model_edgetpu_v6_origin.py 경로에 맞춘 러너
 
-    최적화:
-    - lane 모델은 매 프레임 수행
-    - obs 모델은 obs_interval 프레임마다 1번 수행
-    - obs 안 돌린 프레임은 직전 obs 결과 재사용
+    핵심:
+    - runner에서 미리 320x320 resize 하지 않음
+    - 원본 frame 그대로 infer()에 넣음
+    - resize / RGB 변환 / quantize는 EdgeTPUEngine.preprocess() 내부에 맡김
+    - parse는 원본 해상도(H, W) 기준으로 수행
+    - coral 2개면 lane/obs 추론을 내부 worker thread로 병렬 수행
+    - obs_interval 적용 가능
     """
 
     def __init__(
@@ -56,9 +138,10 @@ class DualModelRunner:
         debug_dir="debug_frames",
         debug_save_interval=10,
         max_debug_saves=20,
-        obs_interval=2,  # 추가
+        obs_interval=2,
     ):
         self.coral = coral
+        self.use_edgetpu = use_edgetpu
         self.use_rpicam = False
 
         self.save_debug_frames = save_debug_frames
@@ -72,6 +155,8 @@ class DualModelRunner:
         self.step_count = 0
         self.prev_obs_list = []
         self.prev_obs_ms = 0.0
+
+        self.parallel_mode = bool(coral == 2 and use_edgetpu)
 
         if self.save_debug_frames:
             self.debug_dir.mkdir(parents=True, exist_ok=True)
@@ -104,6 +189,16 @@ class DualModelRunner:
 
         self.fsm = IntersectionFSM()
         self._printed_input_info = False
+
+        self.lane_worker = None
+        self.obs_worker = None
+
+        if self.parallel_mode:
+            self.lane_worker = InferWorker(self.lane_eng, name="lane-worker")
+            self.obs_worker = InferWorker(self.obs_eng, name="obs-worker")
+            self.lane_worker.start()
+            self.obs_worker.start()
+            print("[INFO] parallel TPU workers started")
 
     def _make_engine_view(self, engine, frame):
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -152,6 +247,50 @@ class DualModelRunner:
                 f"(raw={ok_raw}, lane={ok_lane}, obs={ok_obs}, frame_id={fid})"
             )
 
+    def _infer_serial(self, frame, H, W):
+        lane_outs, lane_ms = self.lane_eng.infer(frame)
+        lane_shapes = parse_lane(lane_outs, H, W)
+
+        if self.step_count % self.obs_interval == 0:
+            obs_outs, obs_ms = self.obs_eng.infer(frame)
+            obs_list = parse_obstacle(obs_outs, H, W)
+            self.prev_obs_list = obs_list
+            self.prev_obs_ms = obs_ms
+        else:
+            obs_list = self.prev_obs_list
+            obs_ms = self.prev_obs_ms
+
+        return lane_shapes, lane_ms, obs_list, obs_ms
+
+    def _infer_parallel(self, frame_id, frame, H, W):
+        # lane은 항상 수행
+        self.lane_worker.push(frame_id, frame)
+
+        # obs는 주기마다만 수행
+        run_obs = self.step_count % self.obs_interval == 0
+        if run_obs:
+            self.obs_worker.push(frame_id, frame)
+
+        lane_outs, lane_ms = self.lane_worker.get_result_for(frame_id, timeout=2.0)
+        if lane_outs is None:
+            raise RuntimeError("lane worker timeout")
+
+        lane_shapes = parse_lane(lane_outs, H, W)
+
+        if run_obs:
+            obs_outs, obs_ms = self.obs_worker.get_result_for(frame_id, timeout=2.0)
+            if obs_outs is None:
+                raise RuntimeError("obs worker timeout")
+
+            obs_list = parse_obstacle(obs_outs, H, W)
+            self.prev_obs_list = obs_list
+            self.prev_obs_ms = obs_ms
+        else:
+            obs_list = self.prev_obs_list
+            obs_ms = self.prev_obs_ms
+
+        return lane_shapes, lane_ms, obs_list, obs_ms
+
     def step(self) -> Optional[DualInferenceResult]:
         step_start_mono = time.monotonic()
         self.step_count += 1
@@ -169,7 +308,7 @@ class DualModelRunner:
             if not ok:
                 return None
 
-            frame_id = None
+            frame_id = self.step_count
             rx_done_mono = None
 
         H, W = frame.shape[:2]
@@ -179,7 +318,8 @@ class DualModelRunner:
                 f"[RUNNER] raw frame shape={frame.shape}, "
                 f"lane_model_input=({self.lane_eng.img_w}x{self.lane_eng.img_h}), "
                 f"obs_model_input=({self.obs_eng.img_w}x{self.obs_eng.img_h}), "
-                f"obs_interval={self.obs_interval}"
+                f"obs_interval={self.obs_interval}, "
+                f"parallel_mode={self.parallel_mode}"
             )
             self._printed_input_info = True
 
@@ -194,20 +334,12 @@ class DualModelRunner:
                 obs_view=obs_view,
             )
 
-        # lane은 매 프레임
-        lane_outs, lane_ms = self.lane_eng.infer(frame)
-        lane_shapes = parse_lane(lane_outs, H, W)
-
-        # obs는 obs_interval 프레임마다 1번
-        if self.step_count % self.obs_interval == 0:
-            obs_outs, obs_ms = self.obs_eng.infer(frame)
-            obs_list = parse_obstacle(obs_outs, H, W)
-
-            self.prev_obs_list = obs_list
-            self.prev_obs_ms = obs_ms
+        if self.parallel_mode:
+            lane_shapes, lane_ms, obs_list, obs_ms = self._infer_parallel(
+                frame_id, frame, H, W
+            )
         else:
-            obs_list = self.prev_obs_list
-            obs_ms = self.prev_obs_ms
+            lane_shapes, lane_ms, obs_list, obs_ms = self._infer_serial(frame, H, W)
 
         p_le, p_ls = compute_lane_error(lane_shapes)
         (p_is, p_it), _ = self.fsm.update(lane_shapes)
@@ -238,6 +370,14 @@ class DualModelRunner:
         )
 
     def close(self):
+        try:
+            if self.lane_worker is not None:
+                self.lane_worker.stop()
+            if self.obs_worker is not None:
+                self.obs_worker.stop()
+        except Exception:
+            pass
+
         try:
             if self.use_rpicam:
                 self.cam.release()
