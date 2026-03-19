@@ -9,6 +9,7 @@ USE_EDGETPU = True
 
 CAM_W = 1920
 CAM_H = 1080
+CAM_FPS = 30
 
 ARDUINO_PORT = "/dev/serial0"
 ARDUINO_BAUDRATE = 38400
@@ -23,4 +24,9 @@ LIDAR_DIST_MAX = 1000
 LIDAR_VALID_TIME = 0.2
 
 SEND_HZ = 20
-DEBUG = True
+
+# 매 프레임 핵심 상태 로그
+DEBUG = False
+
+# 10루프 평균 timing 로그
+DEBUGAVG = True

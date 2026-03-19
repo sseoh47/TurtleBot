@@ -16,8 +16,6 @@ from domain.types import FinalCommand
 from decision.signal import signal_det
 from lidar.lds02 import LDS02
 from comm.arduino_serial import ArduinoSerial
-
-# from dual_model_edgetpu_v6 import DualModelRunner
 from vision.runner import DualModelRunner
 
 ROOT_DIR = Path(__file__).resolve().parent
@@ -37,8 +35,10 @@ from config import (
     USE_EDGETPU,
     CAM_W,
     CAM_H,
+    CAM_FPS,
     SEND_HZ,
     DEBUG,
+    DEBUGAVG,
     ARDUINO_PORT,
     ARDUINO_BAUDRATE,
     LIDAR_PORT,
@@ -72,8 +72,6 @@ def main():
     arduino = None
 
     try:
-        # print("[INFO] controls: s=start signal, q=quit")
-
         runner = DualModelRunner(
             lane_model=LANE_MODEL_PATH,
             obs_model=OBS_MODEL_PATH,
@@ -82,7 +80,7 @@ def main():
             use_edgetpu=USE_EDGETPU,
             cam_w=CAM_W,
             cam_h=CAM_H,
-            cam_fps=10,
+            cam_fps=CAM_FPS,
             save_debug_frames=False,
             debug_dir="debug_frames",
             debug_save_interval=10,
@@ -109,6 +107,15 @@ def main():
         start_signal_until = 0.0
         lidar_ignore_until = time.monotonic() + 5.0
 
+        # 10루프 평균 timing 로그용
+        avg_every = 10
+        avg_count = 0
+        sum_step_dt = 0.0
+        sum_frame_age_start = 0.0
+        sum_frame_age_end = 0.0
+        count_frame_age_start = 0
+        count_frame_age_end = 0
+
         while True:
             key = get_key_nonblock()
             if key == "q":
@@ -117,27 +124,12 @@ def main():
             elif key == "s":
                 start_signal_until = time.monotonic() + 0.5
                 print("\n[KEY] start signal triggered")
-            ## debug
-            loop_t0 = time.monotonic()
+
             result = runner.step()
             if result is None:
                 print("[INFO] inference result is None, stop.")
                 break
 
-            if DEBUG:
-                print(
-                    f"[VISION] line={result.line_id}, obj={result.obj_id}, "
-                    f"lane_status={result.lane_status}, inter={result.inter_type}, "
-                    f"step_dt={result.step_dt:.3f}s, "
-                    f"frame_age_end={result.frame_age_end:.3f}s"
-                    if result.frame_age_end is not None
-                    else f"[VISION] line={result.line_id}, obj={result.obj_id}"
-                )
-
-            # start_signal = time.monotonic() < start_signal_until
-            # lidar_action = lidar.check_action()
-            # lidar_action = 0
-            ## debug ##
             now = time.monotonic()
             start_signal = now < start_signal_until
 
@@ -154,34 +146,78 @@ def main():
                 start_signal=start_signal,
             )
 
-            cmd = FinalCommand(
-                class_id=final_class,
-                angle=final_angle,
-                action=final_action,
-                status=(
+            # 매 프레임 핵심 로그
+            if DEBUG:
+                print(
+                    f"[DBG] line={result.line_id}, "
                     f"obj={result.obj_id}, "
-                    f"line={result.line_id}, "
                     f"angle={result.angle}, "
-                    f"lane_status={result.lane_status}, "
-                    f"inter={result.inter_type}, "
+                    f"class={final_class}, "
+                    f"action={final_action}, "
                     f"lidar={lidar_action}, "
-                    f"start={start_signal}"
-                ),
-            )
+                    f"lane_status={result.lane_status}"
+                )
+
+            # 10루프 평균 timing 로그
+            if DEBUGAVG:
+                avg_count += 1
+
+                if result.step_dt is not None:
+                    sum_step_dt += result.step_dt
+                if result.frame_age_start is not None:
+                    sum_frame_age_start += result.frame_age_start
+                    count_frame_age_start += 1
+                if result.frame_age_end is not None:
+                    sum_frame_age_end += result.frame_age_end
+                    count_frame_age_end += 1
+
+                if avg_count >= avg_every:
+                    avg_step_dt = sum_step_dt / avg_count
+                    avg_frame_age_start = (
+                        sum_frame_age_start / count_frame_age_start
+                        if count_frame_age_start > 0
+                        else None
+                    )
+                    avg_frame_age_end = (
+                        sum_frame_age_end / count_frame_age_end
+                        if count_frame_age_end > 0
+                        else None
+                    )
+
+                    msg = f"[AVG{avg_every}] step_dt={avg_step_dt:.3f}s"
+                    if avg_frame_age_start is not None:
+                        msg += f", frame_age_start={avg_frame_age_start:.3f}s"
+                    if avg_frame_age_end is not None:
+                        msg += f", frame_age_end={avg_frame_age_end:.3f}s"
+
+                    print(msg)
+
+                    avg_count = 0
+                    sum_step_dt = 0.0
+                    sum_frame_age_start = 0.0
+                    sum_frame_age_end = 0.0
+                    count_frame_age_start = 0
+                    count_frame_age_end = 0
 
             now = time.monotonic()
             if now - last_send_time >= 1.0 / SEND_HZ:
-                packet = arduino.send(cmd)
-                last_send_time = now
+                cmd = FinalCommand(
+                    class_id=final_class,
+                    angle=final_angle,
+                    action=final_action,
+                    status=(
+                        f"obj={result.obj_id}, "
+                        f"line={result.line_id}, "
+                        f"angle={result.angle}, "
+                        f"lane_status={result.lane_status}, "
+                        f"inter={result.inter_type}, "
+                        f"lidar={lidar_action}, "
+                        f"start={start_signal}"
+                    ),
+                )
 
-                if DEBUG:
-                    print(
-                        f"[SEND] class={cmd.class_id}, "
-                        f"angle={cmd.angle}, "
-                        f"action={cmd.action}, "
-                        f"status={cmd.status}, "
-                        f"packet={' '.join(f'{b:02X}' for b in packet)}"
-                    )
+                arduino.send(cmd)
+                last_send_time = now
 
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)

@@ -229,8 +229,8 @@ def parse_lane(outputs, H, W):
 
     # ── 디버그: 첫 프레임에서 텐서 shape·score 분포 출력 ──
     if LANE_DEBUG_ONCE:
-        print(f"[LANE DEBUG] raw output shape: {outputs[0].shape}")
-        print(f"[LANE DEBUG] det shape before T: {det.shape}")
+        # print(f"[LANE DEBUG] raw output shape: {outputs[0].shape}")
+        # print(f"[LANE DEBUG] det shape before T: {det.shape}")
         if det.shape[0] > det.shape[1]:
             _d = det.T
         else:
