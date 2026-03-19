@@ -1,3 +1,4 @@
+##원본
 import time
 from dataclasses import dataclass
 from typing import Optional
@@ -36,10 +37,12 @@ class DualModelRunner:
     """
     기존에 잘 되던 dual_model_edgetpu_v6_origin.py 경로에 맞춘 러너
 
-    최적화:
-    - lane 모델은 매 프레임 수행
-    - obs 모델은 obs_interval 프레임마다 1번 수행
-    - obs 안 돌린 프레임은 직전 obs 결과 재사용
+    핵심:
+    - runner에서 미리 320x320 resize 하지 않음
+    - 원본 frame 그대로 infer()에 넣음
+    - resize / RGB 변환 / quantize는 EdgeTPUEngine.preprocess() 내부에 맡김
+    - parse는 원본 해상도(H, W) 기준으로 수행
+    - 디버깅용 저장은 raw / lane_view / obs_view 20세트만 저장
     """
 
     def __init__(
@@ -56,7 +59,6 @@ class DualModelRunner:
         debug_dir="debug_frames",
         debug_save_interval=10,
         max_debug_saves=20,
-        obs_interval=2,  # 추가
     ):
         self.coral = coral
         self.use_rpicam = False
@@ -67,11 +69,6 @@ class DualModelRunner:
         self.max_debug_saves = max(0, int(max_debug_saves))
         self.saved_debug_count = 0
         self.debug_counter = 0
-
-        self.obs_interval = max(1, int(obs_interval))
-        self.step_count = 0
-        self.prev_obs_list = []
-        self.prev_obs_ms = 0.0
 
         if self.save_debug_frames:
             self.debug_dir.mkdir(parents=True, exist_ok=True)
@@ -106,12 +103,17 @@ class DualModelRunner:
         self._printed_input_info = False
 
     def _make_engine_view(self, engine, frame):
+        """
+        디버깅용: 엔진 preprocess와 최대한 같은 화면을 사람이 볼 수 있게 만든다.
+        실제 infer 입력은 여기서 만든 걸 쓰지 않고, raw frame을 그대로 infer()에 넘긴다.
+        """
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         small = cv2.resize(
             rgb,
             (engine.img_w, engine.img_h),
             interpolation=cv2.INTER_NEAREST,
         )
+        # 저장용으로 다시 BGR 변환
         view = cv2.cvtColor(small, cv2.COLOR_RGB2BGR)
         return view
 
@@ -154,7 +156,6 @@ class DualModelRunner:
 
     def step(self) -> Optional[DualInferenceResult]:
         step_start_mono = time.monotonic()
-        self.step_count += 1
 
         if self.use_rpicam:
             ok, cam_data = self.cam.read(wait_timeout=2.0)
@@ -178,11 +179,11 @@ class DualModelRunner:
             print(
                 f"[RUNNER] raw frame shape={frame.shape}, "
                 f"lane_model_input=({self.lane_eng.img_w}x{self.lane_eng.img_h}), "
-                f"obs_model_input=({self.obs_eng.img_w}x{self.obs_eng.img_h}), "
-                f"obs_interval={self.obs_interval}"
+                f"obs_model_input=({self.obs_eng.img_w}x{self.obs_eng.img_h})"
             )
             self._printed_input_info = True
 
+            # 디버깅 저장용 뷰 생성
         if self.save_debug_frames:
             lane_view = self._make_engine_view(self.lane_eng, frame)
             obs_view = self._make_engine_view(self.obs_eng, frame)
@@ -194,20 +195,13 @@ class DualModelRunner:
                 obs_view=obs_view,
             )
 
-        # lane은 매 프레임
+        # 핵심: 원본 frame 그대로 infer()
         lane_outs, lane_ms = self.lane_eng.infer(frame)
+        obs_outs, obs_ms = self.obs_eng.infer(frame)
+
+        # 핵심: parse는 원본 해상도 기준
         lane_shapes = parse_lane(lane_outs, H, W)
-
-        # obs는 obs_interval 프레임마다 1번
-        if self.step_count % self.obs_interval == 0:
-            obs_outs, obs_ms = self.obs_eng.infer(frame)
-            obs_list = parse_obstacle(obs_outs, H, W)
-
-            self.prev_obs_list = obs_list
-            self.prev_obs_ms = obs_ms
-        else:
-            obs_list = self.prev_obs_list
-            obs_ms = self.prev_obs_ms
+        obs_list = parse_obstacle(obs_outs, H, W)
 
         p_le, p_ls = compute_lane_error(lane_shapes)
         (p_is, p_it), _ = self.fsm.update(lane_shapes)
