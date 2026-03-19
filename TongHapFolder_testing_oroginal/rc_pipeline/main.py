@@ -86,7 +86,7 @@ def main():
             save_debug_frames=True,
             debug_dir="debug_frames",
             debug_save_interval=10,
-            max_debug_saves=20,
+            max_debug_saves=10,
         )
 
         lidar = LDS02(
