@@ -82,7 +82,7 @@ def main():
             use_edgetpu=USE_EDGETPU,
             cam_w=CAM_W,
             cam_h=CAM_H,
-            model_input_size=(320, 320),
+            cam_fps=10,
             save_debug_frames=True,
             debug_dir="debug_frames",
             debug_save_interval=10,

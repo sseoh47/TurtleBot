@@ -1,7 +1,7 @@
 # rc_pipeline/config.py
 
-LANE_MODEL_PATH = "/home/kyj/dual_orgin/lane_v26_edgetpu.tflite"
-OBS_MODEL_PATH = "/home/kyj/dual_orgin/Object_detect_edgetpu.tflite"
+LANE_MODEL_PATH = "/home/kyj/dual_origin/lane_v26_edgetpu.tflite"
+OBS_MODEL_PATH = "/home/kyj/dual_origin/Object_detect_edgetpu.tflite"
 
 CAMERA_SOURCE = 0
 CORAL_COUNT = 2
