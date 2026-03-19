@@ -173,7 +173,7 @@ class DualModelRunner:
         else:
             self.lane_eng = EdgeTPUEngine(lane_model, use_edgetpu=use_edgetpu)
             self.obs_eng = EdgeTPUEngine(obs_model, use_edgetpu=use_edgetpu)
-
+        print(f"[RUNNER_CAM_CFG] cam_w={cam_w}, cam_h={cam_h}, cam_fps={cam_fps}")
         if isinstance(source, int):
             print("[INFO] camera source detected -> use rpicam-vid MJPEG bridge")
             self.cam = RPiMJPEGCamera(
