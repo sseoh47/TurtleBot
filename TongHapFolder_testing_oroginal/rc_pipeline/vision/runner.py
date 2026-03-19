@@ -182,16 +182,17 @@ class DualModelRunner:
             )
             self._printed_input_info = True
 
-        # 디버깅 저장용 뷰 생성
-        lane_view = self._make_engine_view(self.lane_eng, frame)
-        obs_view = self._make_engine_view(self.obs_eng, frame)
+            # 디버깅 저장용 뷰 생성
+        if self.save_debug_frames:
+            lane_view = self._make_engine_view(self.lane_eng, frame)
+            obs_view = self._make_engine_view(self.obs_eng, frame)
 
-        self._save_debug_images(
-            frame_id=frame_id,
-            raw_frame=frame,
-            lane_view=lane_view,
-            obs_view=obs_view,
-        )
+            self._save_debug_images(
+                frame_id=frame_id,
+                raw_frame=frame,
+                lane_view=lane_view,
+                obs_view=obs_view,
+            )
 
         # 핵심: 원본 frame 그대로 infer()
         lane_outs, lane_ms = self.lane_eng.infer(frame)

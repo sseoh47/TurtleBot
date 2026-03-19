@@ -83,7 +83,7 @@ def main():
             cam_w=CAM_W,
             cam_h=CAM_H,
             cam_fps=10,
-            save_debug_frames=True,
+            save_debug_frames=False,
             debug_dir="debug_frames",
             debug_save_interval=10,
             max_debug_saves=10,
