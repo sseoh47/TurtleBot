@@ -221,11 +221,11 @@ class LDS02:
             if self.stage4_start is None:
                 self.stage4_start = time.monotonic()
 
-        if time.monotonic() - self.stage4_start < self.stage4_hold:
-            return 4
-        else:
-            self.stage = 0
-            self.stage4_start = None
-            return 0
+            if time.monotonic() - self.stage4_start < self.stage4_hold:
+                return 4
+            else:
+                self.stage = 0
+                self.stage4_start = None
+                return 0
 
         return 0
