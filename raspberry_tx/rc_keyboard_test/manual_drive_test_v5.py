@@ -3,9 +3,6 @@ import serial
 import struct
 import time
 from dataclasses import dataclass
-from datetime import datetime
-from pathlib import Path
-from typing import Optional
 
 
 SERIAL_PORT = "/dev/serial0"
@@ -14,8 +11,6 @@ SEND_HZ = 10
 STEER_ANGLE = 18.0
 FORWARD_ANGLE = 0.0
 START_BYTE = 0xAC
-SCRIPT_DIR = Path(__file__).resolve().parent
-DATA_DIR = SCRIPT_DIR / "data"
 
 
 @dataclass
@@ -76,7 +71,13 @@ def key_to_command(key: int):
         ord("t"): CarCommand(1, 0.0, 9, "1,0,9"),
         ord("y"): CarCommand(1, 0.0, 0, "1,0,0"),
         ord("f"): CarCommand(5, 0.0, 4, "5,0,4"),
-        ord("v"): CarCommand(10, 0.0, 4, "10,0,4"),
+        ord("v"): CarCommand(1, 0.0, 0, "1,0,0"),
+        ord("c"): CarCommand(1, -10.0, 0, "1,-10,0"),
+        ord("x"): CarCommand(1, -20.0, 0, "1,-20,0"),
+        ord("z"): CarCommand(1, -30.0, 0, "1,-30,0"),
+        ord("b"): CarCommand(1, 10.0, 0, "1,10,0"),
+        ord("n"): CarCommand(1, 20.0, 0, "1,20,0"),
+        ord("m"): CarCommand(1, 30.0, 0, "1,30,0"),
     }
     if key in alpha_map:
         return alpha_map[key]
@@ -84,50 +85,9 @@ def key_to_command(key: int):
     return None
 
 
-def start_logging():
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_path = DATA_DIR / f"cmd_log_{timestamp}.txt"
-    log_file = output_path.open("w", encoding="utf-8")
-    log_file.write("timestamp,class_id,angle,action,status,packet_hex\n")
-    log_file.flush()
-    return log_file, output_path
-
-
-def stop_logging(log_file) -> bool:
-    if log_file is None:
-        return True
-
-    try:
-        log_file.flush()
-        log_file.close()
-        return True
-    except Exception:
-        return False
-
-
-def write_log(log_file, cmd: CarCommand, packet_hex: str):
-    if log_file is None:
-        return
-
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-    log_file.write(
-        f"{timestamp},{cmd.class_id},{cmd.angle:.1f},{cmd.action},{cmd.status},{packet_hex}\n"
-    )
-    log_file.flush()
-
-
-def draw_ui(
-    stdscr,
-    cmd: CarCommand,
-    port_open: bool,
-    last_packet_hex: str,
-    logging_enabled: bool,
-    log_path: Optional[Path],
-    log_message: str,
-):
+def draw_ui(stdscr, cmd: CarCommand, port_open: bool, last_packet_hex: str):
     stdscr.erase()
-    stdscr.addstr(0, 0, "RC CAR KEYBOARD TEST V3")
+    stdscr.addstr(0, 0, "RC CAR KEYBOARD TEST V5")
     stdscr.addstr(1, 0, "======================")
     stdscr.addstr(3, 0, f"Serial Port : {SERIAL_PORT}")
     stdscr.addstr(4, 0, f"Baudrate    : {BAUDRATE}")
@@ -137,32 +97,33 @@ def draw_ui(
     stdscr.addstr(9, 0, f"angle       : {cmd.angle:.1f}")
     stdscr.addstr(10, 0, f"action      : {cmd.action}")
     stdscr.addstr(11, 0, f"last packet : {last_packet_hex}")
-    stdscr.addstr(13, 0, f"Logging     : {'ON' if logging_enabled else 'OFF'}")
-    stdscr.addstr(14, 0, f"Save Dir    : {DATA_DIR}")
-    stdscr.addstr(15, 0, f"Log File    : {log_path if log_path else '-'}")
-    stdscr.addstr(16, 0, f"Log Msg     : {log_message}")
 
-    stdscr.addstr(18, 0, "[Arrow Keys]")
-    stdscr.addstr(19, 0, "UP          : 1,0,0")
-    stdscr.addstr(20, 0, "DOWN        : 1,0,0")
-    stdscr.addstr(21, 0, "LEFT        : 1,-18,0")
-    stdscr.addstr(22, 0, "RIGHT       : 1,18,0")
+    stdscr.addstr(13, 0, "[Arrow Keys]")
+    stdscr.addstr(14, 0, "UP          : 1,0,0")
+    stdscr.addstr(15, 0, "DOWN        : 1,0,0")
+    stdscr.addstr(16, 0, "LEFT        : 1,-18,0")
+    stdscr.addstr(17, 0, "RIGHT       : 1,18,0")
 
-    stdscr.addstr(24, 0, "[Digits]")
-    stdscr.addstr(25, 0, "1..9        : n,0,0")
-    stdscr.addstr(26, 0, "0           : 10,0,0")
+    stdscr.addstr(19, 0, "[Digits]")
+    stdscr.addstr(20, 0, "1..9        : n,0,0")
+    stdscr.addstr(21, 0, "0           : 10,0,0")
 
-    stdscr.addstr(28, 0, "[Letters]")
-    stdscr.addstr(29, 0, "P           : 0,0,0")
-    stdscr.addstr(30, 0, "Q           : 1,0,1")
-    stdscr.addstr(31, 0, "W           : 1,0,2")
-    stdscr.addstr(32, 0, "E           : 2,0,3")
-    stdscr.addstr(33, 0, "R           : 2,0,4")
-    stdscr.addstr(34, 0, "T           : 1,0,9")
-    stdscr.addstr(35, 0, "Y           : 1,0,0")
-    stdscr.addstr(36, 0, "F           : 5,0,4")
-    stdscr.addstr(37, 0, "V           : 10,0,4")
-    stdscr.addstr(38, 0, "M           : cmd log toggle")
+    stdscr.addstr(23, 0, "[Letters]")
+    stdscr.addstr(24, 0, "P           : 0,0,0")
+    stdscr.addstr(25, 0, "Q           : 1,0,1")
+    stdscr.addstr(26, 0, "W           : 1,0,2")
+    stdscr.addstr(27, 0, "E           : 2,0,3")
+    stdscr.addstr(28, 0, "R           : 2,0,4")
+    stdscr.addstr(29, 0, "T           : 1,0,9")
+    stdscr.addstr(30, 0, "Y           : 1,0,0")
+    stdscr.addstr(31, 0, "F           : 5,0,4")
+    stdscr.addstr(32, 0, "V           : 1,0,0")
+    stdscr.addstr(33, 0, "C           : 1,-10,0")
+    stdscr.addstr(34, 0, "X           : 1,-20,0")
+    stdscr.addstr(35, 0, "Z           : 1,-30,0")
+    stdscr.addstr(36, 0, "B           : 1,10,0")
+    stdscr.addstr(37, 0, "N           : 1,20,0")
+    stdscr.addstr(38, 0, "M           : 1,30,0")
 
     stdscr.addstr(40, 0, "ESC / Shift+Q : quit")
     stdscr.refresh()
@@ -175,9 +136,6 @@ def main(stdscr):
 
     ser = None
     port_open = False
-    log_file = None
-    log_path = None
-    log_message = "READY"
 
     try:
         ser = serial.Serial(SERIAL_PORT, BAUDRATE, timeout=0.1)
@@ -199,28 +157,6 @@ def main(stdscr):
             if key in (27, ord("Q")):
                 break
 
-            if key in (ord("m"), ord("M")):
-                if log_file is None:
-                    try:
-                        log_file, log_path = start_logging()
-                        log_message = f"LOG START: {log_path.name}"
-                    except Exception as exc:
-                        log_file = None
-                        log_path = None
-                        log_message = f"LOG START FAIL: {exc}"
-                else:
-                    saved_path = log_path
-                    stopped_cleanly = stop_logging(log_file)
-                    log_file = None
-                    log_path = None
-                    if saved_path is not None:
-                        if stopped_cleanly:
-                            log_message = f"LOG SAVED: {saved_path.name}"
-                        else:
-                            log_message = f"LOG CLOSE FAIL: {saved_path.name}"
-                    else:
-                        log_message = "LOG STOPPED"
-
             cmd = key_to_command(key)
             if cmd is not None:
                 current_cmd = cmd
@@ -230,23 +166,11 @@ def main(stdscr):
                 packet = build_packet(current_cmd)
                 last_packet_hex = " ".join(f"{byte:02X}" for byte in packet)
                 send_packet(ser, current_cmd)
-                write_log(log_file, current_cmd, last_packet_hex)
                 last_send_time = now
 
-            is_logging = log_file is not None
-            draw_ui(
-                stdscr,
-                current_cmd,
-                port_open,
-                last_packet_hex,
-                is_logging,
-                log_path,
-                log_message,
-            )
+            draw_ui(stdscr, current_cmd, port_open, last_packet_hex)
 
     finally:
-        if log_file is not None:
-            stop_logging(log_file)
         if ser is not None:
             try:
                 stop_cmd = CarCommand(0, 0.0, 0, "FINAL STOP")
