@@ -53,12 +53,16 @@ class LDS02:
 
         self.stage = 0
 
+        self.stage4_start = None
+        self.stage4_hold = 2.0   # 4번 action을 2초 유지
+
     def close(self):
         if self.ser.is_open:
             self.ser.close()
 
     def reset_stage(self):
         self.stage = 0
+        self.stage4_start = None
 
     def _read_exact(self, n: int) -> bytes:
         data = self.ser.read(n)
@@ -205,6 +209,7 @@ class LDS02:
             self.stage = 3
         elif self.stage == 3 and d4:
             self.stage = 4
+            self.stage4_start = time.monotonic()
 
         if self.stage == 1:
             return 1
@@ -213,7 +218,14 @@ class LDS02:
         elif self.stage == 3:
             return 3
         elif self.stage == 4:
-            self.stage = 0
-            return 4
+            if self.stage4_start is None:
+                self.stage4_start = time.monotonic()
+
+            if time.monotonic() - self.stage4_start < self.stage4_hold:
+                return 4
+            else:
+                self.stage = 0
+                self.stage4_start = None
+                return 0
 
         return 0
