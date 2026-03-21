@@ -1,7 +1,7 @@
 #include "drive.h"
 //테스트
 static unsigned long stopStart = 0;
-static const unsigned long STOP_DURATION = 1000; // 500ms 정지
+static const unsigned long STOP_DURATION = 3000; // 3000ms 정지
 
 // ================= setup 시작 루틴  =================
 void updateStartupRoutine()
