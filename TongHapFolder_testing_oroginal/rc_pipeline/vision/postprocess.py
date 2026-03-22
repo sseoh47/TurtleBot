@@ -6,38 +6,36 @@ def convert_lane_result(p_le, p_ls, p_is, p_it):
     내부 lane 결과를 최종 lane class 체계로 변환
       0 = 차선 없음
       1 = 일반 차선
-      6 = left_t
+      6 = left_t / curve_left
+      7 = right_t
       8 = down_t
       9 = cross
-      10 = 물류 pass / KNU / box 계열 (현재 lane에서는 미사용)
     """
     inter_map = {
         "left_t": 6,
+        "curve_left": 6,
+        "right_t": 7,
         "down_t": 8,
         "cross": 9,
-        # "pass": 10,  # 필요하면 나중에 추가
     }
-
-    angle = float(p_le)
-
-    if p_is and p_it in inter_map:
-        return inter_map[p_it], angle
 
     if p_ls == "lost":
         return 0, 0.0
 
-    return 1, angle
+    if p_is and p_it in inter_map:
+        return inter_map[p_it], 0.0
+
+    return 1, float(round(p_le, 2))
 
 
 def convert_object_result(obs_list) -> Optional[int]:
     """
     내부 객체 결과를 최종 obj class 체계로 변환
-      2  = SL
-      3  = person
-      4  = car
-      5  = parking
-      10 = KNU / box / 물류 pass 계열
-      없음 = None
+      SL      -> 2
+      person  -> 3
+      car     -> 4
+      parking -> 5
+      그 외 / 없음 -> None
     """
     if not obs_list:
         return None
@@ -48,8 +46,5 @@ def convert_object_result(obs_list) -> Optional[int]:
         "person": 3,
         "car": 4,
         "parking": 5,
-        "KNU": 10,
-        "box": 10,
-        # "pass": 10,  # 클래스명이 따로 생기면 사용
     }
     return obj_map.get(name)

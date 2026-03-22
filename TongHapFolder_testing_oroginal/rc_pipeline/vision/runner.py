@@ -1,8 +1,8 @@
 import time
 import threading
 from dataclasses import dataclass
-from typing import Optional
 from pathlib import Path
+from typing import Optional
 
 import cv2
 
@@ -11,10 +11,10 @@ from vision.postprocess import convert_lane_result, convert_object_result
 
 from dual_model_edgetpu_v6_origin import (
     EdgeTPUEngine,
+    IntersectionFSM,
+    compute_lane_error,
     parse_lane,
     parse_obstacle,
-    compute_lane_error,
-    IntersectionFSM,
 )
 
 
@@ -34,12 +34,6 @@ class DualInferenceResult:
 
 
 class InferWorker(threading.Thread):
-    """
-    EdgeTPU 추론 전용 워커
-    push(frame_id, frame) 하면 가장 최신 요청만 유지하고 infer 수행
-    get_result_for(frame_id)로 해당 프레임 결과를 기다려서 가져온다.
-    """
-
     def __init__(self, engine, name="infer-worker"):
         super().__init__(daemon=True, name=name)
         self.engine = engine
@@ -75,7 +69,6 @@ class InferWorker(threading.Thread):
                 if remain <= 0:
                     return None, None
                 self.res_cv.wait(timeout=remain)
-
         return None, None
 
     def run(self):
@@ -83,10 +76,8 @@ class InferWorker(threading.Thread):
             with self.req_cv:
                 while self.alive and not self.has_request:
                     self.req_cv.wait(timeout=0.5)
-
                 if not self.alive:
                     break
-
                 frame_id = self.pending_frame_id
                 frame = self.pending_frame
                 self.has_request = False
@@ -95,7 +86,6 @@ class InferWorker(threading.Thread):
                 continue
 
             outs, ms = self.engine.infer(frame)
-
             with self.res_cv:
                 self.last_result_frame_id = frame_id
                 self.last_outs = outs
@@ -111,18 +101,6 @@ class InferWorker(threading.Thread):
 
 
 class DualModelRunner:
-    """
-    dual_model_edgetpu_v6_origin.py 경로에 맞춘 러너
-
-    핵심:
-    - runner에서 미리 320x320 resize 하지 않음
-    - 원본 frame 그대로 infer()에 넣음
-    - resize / RGB 변환 / quantize는 EdgeTPUEngine.preprocess() 내부에 맡김
-    - parse는 모델 입력 해상도(INF_H, INF_W) 기준으로 수행
-    - coral 2개면 lane/obs 추론을 내부 worker thread로 병렬 수행
-    - obs_interval 적용 가능
-    """
-
     def __init__(
         self,
         lane_model,
@@ -175,11 +153,7 @@ class DualModelRunner:
 
         if isinstance(source, int):
             print("[INFO] camera source detected -> use rpicam-vid MJPEG bridge")
-            self.cam = RPiMJPEGCamera(
-                width=cam_w,
-                height=cam_h,
-                framerate=cam_fps,
-            )
+            self.cam = RPiMJPEGCamera(width=cam_w, height=cam_h, framerate=cam_fps)
             self.use_rpicam = True
         else:
             self.cap = cv2.VideoCapture(source)
@@ -191,7 +165,6 @@ class DualModelRunner:
 
         self.lane_worker = None
         self.obs_worker = None
-
         if self.parallel_mode:
             self.lane_worker = InferWorker(self.lane_eng, name="lane-worker")
             self.obs_worker = InferWorker(self.obs_eng, name="obs-worker")
@@ -202,12 +175,9 @@ class DualModelRunner:
     def _make_engine_view(self, engine, frame):
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         small = cv2.resize(
-            rgb,
-            (engine.img_w, engine.img_h),
-            interpolation=cv2.INTER_NEAREST,
+            rgb, (engine.img_w, engine.img_h), interpolation=cv2.INTER_NEAREST
         )
-        view = cv2.cvtColor(small, cv2.COLOR_RGB2BGR)
-        return view
+        return cv2.cvtColor(small, cv2.COLOR_RGB2BGR)
 
     def _save_debug_images(self, frame_id, raw_frame, lane_view, obs_view):
         if not self.save_debug_frames:
@@ -233,17 +203,11 @@ class DualModelRunner:
         if ok_raw and ok_lane and ok_obs:
             self.saved_debug_count += 1
             print(
-                f"[DEBUG_SAVE] saved set {self.saved_debug_count}/{self.max_debug_saves} "
-                f"(frame_id={fid})"
+                f"[DEBUG_SAVE] saved set {self.saved_debug_count}/{self.max_debug_saves} (frame_id={fid})"
             )
-            if self.saved_debug_count >= self.max_debug_saves:
-                print(
-                    "[DEBUG_SAVE] reached max debug saves, no more images will be saved."
-                )
         else:
             print(
-                f"[DEBUG_SAVE] save failed "
-                f"(raw={ok_raw}, lane={ok_lane}, obs={ok_obs}, frame_id={fid})"
+                f"[DEBUG_SAVE] save failed (raw={ok_raw}, lane={ok_lane}, obs={ok_obs}, frame_id={fid})"
             )
 
     def _infer_serial(self, frame, INF_H, INF_W):
@@ -263,7 +227,6 @@ class DualModelRunner:
 
     def _infer_parallel(self, frame_id, frame, INF_H, INF_W):
         self.lane_worker.push(frame_id, frame)
-
         run_obs = self.step_count % self.obs_interval == 0
         if run_obs:
             self.obs_worker.push(frame_id, frame)
@@ -271,14 +234,12 @@ class DualModelRunner:
         lane_outs, lane_ms = self.lane_worker.get_result_for(frame_id, timeout=2.0)
         if lane_outs is None:
             raise RuntimeError("lane worker timeout")
-
         lane_shapes = parse_lane(lane_outs, INF_H, INF_W)
 
         if run_obs:
             obs_outs, obs_ms = self.obs_worker.get_result_for(frame_id, timeout=2.0)
             if obs_outs is None:
                 raise RuntimeError("obs worker timeout")
-
             obs_list = parse_obstacle(obs_outs, INF_H, INF_W)
             self.prev_obs_list = obs_list
             self.prev_obs_ms = obs_ms
@@ -296,7 +257,6 @@ class DualModelRunner:
             ok, cam_data = self.cam.read(wait_timeout=2.0)
             if not ok:
                 return None
-
             frame = cam_data["frame"]
             frame_id = cam_data["frame_id"]
             rx_done_mono = cam_data["rx_done_mono"]
@@ -304,28 +264,21 @@ class DualModelRunner:
             ok, frame = self.cap.read()
             if not ok:
                 return None
-
             frame_id = self.step_count
             rx_done_mono = None
 
-        # 모델 입력 해상도 기준으로 parse
         INF_H = self.lane_eng.img_h
         INF_W = self.lane_eng.img_w
 
         if not self._printed_input_info:
             print(
-                f"[RUNNER] raw frame shape={frame.shape}, "
-                f"lane_model_input=({self.lane_eng.img_w}x{self.lane_eng.img_h}), "
-                f"obs_model_input=({self.obs_eng.img_w}x{self.obs_eng.img_h}), "
-                f"obs_interval={self.obs_interval}, "
-                f"parallel_mode={self.parallel_mode}"
+                f"[RUNNER] raw frame shape={frame.shape}, lane_model_input=({self.lane_eng.img_w}x{self.lane_eng.img_h}), obs_model_input=({self.obs_eng.img_w}x{self.obs_eng.img_h}), obs_interval={self.obs_interval}, parallel_mode={self.parallel_mode}"
             )
             self._printed_input_info = True
 
         if self.save_debug_frames:
             lane_view = self._make_engine_view(self.lane_eng, frame)
             obs_view = self._make_engine_view(self.obs_eng, frame)
-
             self._save_debug_images(
                 frame_id=frame_id,
                 raw_frame=frame,
@@ -348,8 +301,11 @@ class DualModelRunner:
         line_id, angle = convert_lane_result(p_le, p_ls, p_is, p_it)
         obj_id = convert_object_result(obs_list)
 
-        step_end_mono = time.monotonic()
+        print(
+            f"[RUNNER DBG] frame_id={frame_id}, lane_shapes={len(lane_shapes)}, obs={len(obs_list)}, p_le={p_le:.2f}, p_ls={p_ls}, p_is={p_is}, p_it={p_it}, line_id={line_id}, angle={angle}, obj_id={obj_id}"
+        )
 
+        step_end_mono = time.monotonic()
         frame_age_start = None
         frame_age_end = None
         if rx_done_mono is not None:
