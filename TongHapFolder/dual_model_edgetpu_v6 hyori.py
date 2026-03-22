@@ -535,246 +535,190 @@ def parse_obstacle(outputs, H, W):
 #         return "straight"
 #     return None
 
-# =========================
-# 3x3 zone helper
-# =========================
-_X1 = 1.0 / 3.0
-_X2 = 2.0 / 3.0
-_Y1 = 1.0 / 3.0
-_Y2 = 2.0 / 3.0
-
-_LANE_MID_X = 0.5
-
-# straight angle 계산용 y 가중치
-# straight는 상/중/하 다 보되, 하단 가중치를 더 줌
-_ZONE_W_TOP = 0.20
-_ZONE_W_MID = 0.30
-_ZONE_W_BOTTOM = 0.50
-
-
-def _x_zone(cx: float) -> str:
-    if cx < _X1:
-        return "left"
-    if cx < _X2:
-        return "center"
-    return "right"
-
-
-def _y_zone(cy: float) -> str:
-    if cy < _Y1:
-        return "top"
-    if cy < _Y2:
-        return "mid"
-    return "bottom"
-
-
-def _zone_weight(cy: float) -> float:
-    z = _y_zone(cy)
-    if z == "bottom":
-        return _ZONE_W_BOTTOM
-    if z == "mid":
-        return _ZONE_W_MID
-    return _ZONE_W_TOP
-
-
-def _has_class(shapes, cls_name, x=None, y=None):
-    for s in shapes:
-        if s["class_name"] != cls_name:
-            continue
-        if x is not None and _x_zone(float(s["cx_norm"])) != x:
-            continue
-        if y is not None and _y_zone(float(s["cy_norm"])) != y:
-            continue
-        return True
-    return False
-
-
-def _count_class(shapes, cls_name, x=None, y=None):
-    c = 0
-    for s in shapes:
-        if s["class_name"] != cls_name:
-            continue
-        if x is not None and _x_zone(float(s["cx_norm"])) != x:
-            continue
-        if y is not None and _y_zone(float(s["cy_norm"])) != y:
-            continue
-        c += 1
-    return c
-
 
 ## 조향 제어용 : 차량이 차선 중앙에서 얼마나 벗어났는지 계산
 ## return : (error, status) : -` ~ 1 정도 범위의 좌우 오차, 차선인식상태`
 def compute_lane_error(shapes):
-    """
-    straight용 angle 원재료 계산
-    - line만 사용
-    - top/mid/bottom 모두 사용
-    - center only는 제외
-    - left only / right only 허용
-    - 반환: (error, status)
-      error 범위: 대략 -10 ~ +10
-    """
+    mid = 0.5
     lines = [s for s in shapes if s["class_name"] == "line"]
+
     if not lines:
         return 0.0, "lost"
 
-    left_pts = []
-    right_pts = []
-    center_pts = []
+    ll = [s["cx_norm"] for s in lines if s["cx_norm"] < mid]
+    rl = [s["cx_norm"] for s in lines if s["cx_norm"] >= mid]
 
-    for s in lines:
-        cx = float(s["cx_norm"])
-        cy = float(s["cy_norm"])
-        w = _zone_weight(cy)
-        xz = _x_zone(cx)
-
-        if xz == "left":
-            left_pts.append((cx, w))
-        elif xz == "right":
-            right_pts.append((cx, w))
-        else:
-            center_pts.append((cx, w))
-
-    def weighted_mean(items):
-        if not items:
-            return None
-        ws = sum(w for _, w in items)
-        if ws <= 1e-6:
-            return None
-        return sum(x * w for x, w in items) / ws
-
-    left_mean = weighted_mean(left_pts)
-    right_mean = weighted_mean(right_pts)
-
-    # center only는 제외
-    if left_mean is None and right_mean is None:
-        return 0.0, "lost"
-
-    # 좌우 둘 다 있으면 lane center 사용
-    if left_mean is not None and right_mean is not None:
-        lane_center = (left_mean + right_mean) * 0.5
-        err = ((_LANE_MID_X - lane_center) / 0.5) * 10.0
-        err = float(np.clip(err, -10.0, 10.0))
+    if ll and rl:
+        center = (np.mean(ll) + np.mean(rl)) / 2
+        err = float(np.clip((center - mid) / mid * 10, -10, 10))
         return err, "ok"
 
-    # 왼쪽만
-    if left_mean is not None:
-        err = ((_LANE_MID_X - left_mean) / 0.5) * 10.0
-        err = float(np.clip(err, -10.0, 10.0))
+    if ll:
+        err = float(np.clip((np.mean(ll) - mid) / mid * 10, -10, 10))
         return err, "left_only"
 
-    # 오른쪽만
-    err = ((_LANE_MID_X - right_mean) / 0.5) * 10.0
-    err = float(np.clip(err, -10.0, 10.0))
-    return err, "right_only"
+    if rl:
+        err = float(np.clip((np.mean(rl) - mid) / mid * 10, -10, 10))
+        return err, "right_only"
+
+    return 0.0, "lost"
 
 
 def _raw_classify(shapes):
-    """
-    현재 프레임 기준 특수상황 분류.
+    lines = [s for s in shapes if s["class_name"] == "line"]
+    curves = [s for s in shapes if s["class_name"] == "curve"]
+    eeus = [s for s in shapes if s["class_name"] == "eeu"]
 
-    규칙 요약
-    - straight 판단용 lane은 상/중/하 모두 사용한다. (angle 계산은 compute_lane_error 담당)
-    - left_t / down_t는 가까운 구간 우선이므로 mid/bottom을 더 강하게 본다.
-    - cross는 eeu가 아니라 curve 쌍 기반 직진 상황으로 본다.
-    - 현재 프레임만 사용한다.
+    if not lines and not curves and not eeus:
+        return "no_lane"
 
-    반환:
-      - "left_t"
-      - "down_t"
-      - "cross"
-      - None
-    """
+    if lines and not curves and not eeus:
+        return "straight"
 
-    # ---------- straight 참고용 lane 존재 ----------
-    has_line_left = _has_class(shapes, "line", x="left")
-    right_line_any = _has_class(shapes, "line", x="right")
+    if eeus and lines and not curves:
+        eeu_top = any(s["cy_norm"] < _CY_TOP for s in eeus)
+        line_right = any(s["cx_norm"] >= _CX_RIGHT for s in lines)
+        if eeu_top and line_right:
+            return "curve_left"
 
-    # ---------- left_t ----------
-    # 1) 왼쪽 하단 curve 가 보이면 좌회전
-    left_bottom_curve = _has_class(shapes, "curve", x="left", y="bottom")
+    if curves and lines and not eeus:
+        has_curve_left = any(s["cx_norm"] < _CX_RIGHT for s in curves)
+        has_curve_right = any(s["cx_norm"] >= _CX_RIGHT for s in curves)
+        has_line_right = any(s["cx_norm"] >= _CX_RIGHT for s in lines)
+        if has_curve_left and not has_curve_right and has_line_right:
+            return "left_t"
 
-    # 2) curve처럼 보여도 실제 검출은 eeu + right line 으로 나올 수 있음
-    #    단, 상단은 너무 멀어서 제외하고 mid/bottom만 사용
-    mid_eeu = _has_class(shapes, "eeu", y="mid")
-    bottom_eeu = _has_class(shapes, "eeu", y="bottom")
+    if curves:
+        has_curve_left = any(s["cx_norm"] < _CX_RIGHT for s in curves)
+        has_curve_right = any(s["cx_norm"] >= _CX_RIGHT for s in curves)
+        if has_curve_left and has_curve_right:
+            return "cross_or_down_t"
 
-    # ---------- down_t ----------
-    # 하단에 eeu가 길게 깔린 상황
-    # => bottom에서 eeu가 좌/중/우 중 2영역 이상 차지하면 wide로 해석
-    eeu_bottom_left = _count_class(shapes, "eeu", x="left", y="bottom")
-    eeu_bottom_center = _count_class(shapes, "eeu", x="center", y="bottom")
-    eeu_bottom_right = _count_class(shapes, "eeu", x="right", y="bottom")
-
-    eeu_bottom_wide = (
-        sum(
-            [
-                eeu_bottom_left > 0,
-                eeu_bottom_center > 0,
-                eeu_bottom_right > 0,
-            ]
-        )
-        >= 2
-    )
-
-    # ---------- cross ----------
-    # curve 기반 직진 상황
-    # top은 너무 멀어서 제외하고 mid/bottom만 사용
-    curve_mid_left = _has_class(shapes, "curve", x="left", y="mid")
-    curve_mid_right = _has_class(shapes, "curve", x="right", y="mid")
-    curve_bottom_left = _has_class(shapes, "curve", x="left", y="bottom")
-    curve_bottom_right = _has_class(shapes, "curve", x="right", y="bottom")
-
-    cross_cond = (curve_mid_left and curve_mid_right) or (
-        curve_bottom_left and curve_bottom_right
-    )
-
-    # ---------- 우선순위 ----------
-    # 1) 하단 curve -> left_t
-    if left_bottom_curve:
-        return "left_t"
-
-    # 2) 하단 eeu wide -> down_t
-    if eeu_bottom_wide:
-        return "down_t"
-
-    # 3) cross는 curve pair
-    #    단, eeu 기반 down_t와 겹치면 down_t 우선
-    if cross_cond and not eeu_bottom_wide:
-        return "cross"
-
-    # 4) mid/bottom eeu + right line 기반 left_t
-    #    상단 제외, 중단/하단 우선
-    if (mid_eeu or bottom_eeu) and right_line_any and not has_line_left:
-        return "left_t"
+    if eeus and not curves and not lines:
+        return "pending_eeu"
 
     return None
 
 
 def _resolve_cross_down(shapes):
-    raw = _raw_classify(shapes)
-    if raw in ("left_t", "down_t", "cross"):
-        return raw
+    eeus = [s for s in shapes if s["class_name"] == "eeu"]
+    curves = [s for s in shapes if s["class_name"] == "curve"]
+
+    if eeus:
+        return "down_t"
+
+    curve_left_top = any(
+        s["cx_norm"] < _CX_RIGHT and s["cy_norm"] < _CY_TOP for s in curves
+    )
+    curve_right_top = any(
+        s["cx_norm"] >= _CX_RIGHT and s["cy_norm"] < _CY_TOP for s in curves
+    )
+    if curve_left_top and curve_right_top:
+        return "cross"
+
     return None
 
 
+# cy_norm 기준: 0.0=상단, 1.0=하단
+# "상단"  : cy_norm < 0.45  (ROI 제거 후 기준)
+# "하단"  : cy_norm >= 0.55
+# "오른쪽": cx_norm >= 0.5
+# "왼쪽"  : cx_norm < 0.5
+
+_CY_TOP = 0.45  # 이 값보다 작으면 "상단" 탐지
+_CY_BOTTOM = 0.55  # 이 값 이상이면 "하단" 탐지
+_CX_RIGHT = 0.5  # 이 값 이상이면 "오른쪽"
+
+
+## 교차로 판단 결과를 바로 반환X< 좀 더 안정적으로 확정해주는 상태머신
+## : 프레임마다 나온 교차로 추정값(raw) 받아서 순간적 튐은 무시
+##   일정 조건 만족할떄만 진짜 교차로로 확정
 class IntersectionFSM:
-    """
-    현재 프레임 기반의 얇은 분류기.
-    기존 인터페이스(update 반환형)는 유지.
-    """
-
-    def __init__(self, *args, **kwargs):
+    def __init__(self, confirm=2, hold=10, maxhist=30):
+        self.confirm = confirm
+        self.hold = hold
+        self.maxhist = maxhist
+        self.consec = 0
+        self.hold_until = 0.0
         self.cur = None
+        self.hist = []
+        self._pending = False
 
+    ## 매 프레임마다 호출
+    ## 현재 프레임 shapes를 history에 저장, 너무 길어지면 오래된 것 제거
     def update(self, shapes):
-        raw = _raw_classify(shapes)
-        resolved = _resolve_cross_down(shapes)
+        self.hist.append(shapes)
+        if len(self.hist) > self.maxhist:
+            self.hist.pop(0)
 
-        self.cur = resolved
-        if resolved is None:
+        raw = _raw_classify(shapes)
+
+        if self._pending:
+            resolved = _resolve_cross_down(shapes)
+            if resolved:
+                self._pending = False
+                self.cur = resolved
+                self.hold_until = time.time() + self.hold
+                return (True, self.cur), raw
             return (False, None), raw
-        return (True, resolved), raw
+
+        if raw in ("cross_or_down_t", "pending_eeu"):
+            self._pending = True
+            self.consec = 0
+            return (False, None), raw
+
+        return self._fsm(raw), raw
+
+    def _fsm(self, raw):
+        now = time.time()
+        if now < self.hold_until:
+            return True, self.cur
+
+        if raw in ("no_lane", "straight", None):
+            self.consec = 0
+            return False, None
+        # now = time.time()
+
+        # if now < self.hold_until:
+        #     if raw and raw not in ("no_lane", "straight", None) and raw != self.cur:
+        #         self.hold_until = 0.0
+        #         self.consec = 1
+        #         self.cur = raw
+        #     else:
+        #         return True, self.cur
+
+        # if raw in ("no_lane", "straight", None):
+        #     self.consec = 0
+        #     return False, None
+
+        # self.consec = self.consec + 1 if raw == self.cur else 1
+        # self.cur = raw
+        # if self.consec >= self.confirm:
+        #     self.hold_until = now + self.hold
+        #     self.consec = 0
+        #     return True, self.cur
+
+        # return False, None
+
+    # def _fsm(self, raw):
+    #     now = time.time()
+    #     if now < self.hold_until:   ## 교차로 확정하고 hold 중이면 그냥 유지
+    #         return True, self.cur
+    #     if raw in ("curve_right", "curve_left"):    ## 곡선은 즉시 확정
+    #         self.cur = raw
+    #         self.hold_until = now + self.hold
+    #         self.consec = 0
+    #         return True, self.cur
+    #     if raw and raw not in ("approaching", "straight", None):    ## 일반 교차로는 연속 확인 후 확정
+    #         self.consec = self.consec + 1 if raw == self.cur else 1
+    #         self.cur = raw
+    #         if self.consec >= self.confirm:
+    #             self.hold_until = now + self.hold
+    #             self.consec = 0
+    #             return True, self.cur
+    #     else:
+    #         self.consec = 0
+    #     return False, None
 
 
 # ══════════════════════════════════════════════
@@ -924,7 +868,6 @@ def _draw_frame(d: dict) -> np.ndarray:
 # KNU, 는 10으로 출력 box는 아직 미정
 OBS_OUTPUT_ID = {
     "KNU": 10,  #
-    "box": 10,
     "SL": 2,  # 2번
     "person": 3,  # 3번
     "car": 4,  # 4번
@@ -942,10 +885,9 @@ def make_output(le, ls, is_inter, itype, obs_list):
       4 = car 감지
       5 = parking 감지
       6 = ㅓ자 교차로
-      7 = + 자 교차로
+      7 = ㅏ자 교차로
       8 = ㅜ자 교차로
-      9 = S들어온상황
-      10 = box 이고SL이 아닌 KNU 상황
+      9 = +자 교차로
 
     반환: 패킷 리스트
       예) [[1, 0.123], [4, None], [3, None]]
