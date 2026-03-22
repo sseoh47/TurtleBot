@@ -8,14 +8,15 @@ import cv2
 
 from vision.camera import RPiMJPEGCamera
 from vision.postprocess import convert_lane_result, convert_object_result
-
-from dual_model_edgetpu_v6_origin import (
-    EdgeTPUEngine,
+from dual_model_edgetpu_v6_origin import EdgeTPUEngine
+from dual_model_edgetpu_v6_origin import EdgeTPUEngine, parse_lane_det
+from vision.lane_postprocess import (
     IntersectionFSM,
     compute_lane_error,
     parse_lane,
     parse_obstacle,
 )
+from vision.postprocess import convert_lane_result, convert_object_result
 
 
 @dataclass
@@ -212,7 +213,7 @@ class DualModelRunner:
 
     def _infer_serial(self, frame, INF_H, INF_W):
         lane_outs, lane_ms = self.lane_eng.infer(frame)
-        lane_shapes = parse_lane(lane_outs, INF_H, INF_W)
+        lane_shapes = parse_lane_det(lane_outs, INF_H, INF_W)
 
         if self.step_count % self.obs_interval == 0:
             obs_outs, obs_ms = self.obs_eng.infer(frame)
@@ -234,7 +235,7 @@ class DualModelRunner:
         lane_outs, lane_ms = self.lane_worker.get_result_for(frame_id, timeout=2.0)
         if lane_outs is None:
             raise RuntimeError("lane worker timeout")
-        lane_shapes = parse_lane(lane_outs, INF_H, INF_W)
+        lane_shapes = parse_lane_det(lane_outs, INF_H, INF_W)
 
         if run_obs:
             obs_outs, obs_ms = self.obs_worker.get_result_for(frame_id, timeout=2.0)

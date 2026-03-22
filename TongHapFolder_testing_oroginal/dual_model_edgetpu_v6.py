@@ -73,7 +73,7 @@ INTER_DESC = {
 }
 
 # ROI: 상단 몇 % 를 제거할지 (0.0 ~ 1.0)
-LANE_ROI_TOP = 0.0
+LANE_ROI_TOP = 0.30
 
 
 # ══════════════════════════════════════════════
@@ -280,202 +280,535 @@ def parse_lane_det(outputs, H, W):
 
 
 def parse_lane(outputs, H, W):
+    shapes = []
+    if len(outputs) < 2:
+        return shapes
+
+    proto_raw = None
+    det_raw = None
+    for o in outputs:
+        if o.ndim == 4:
+            proto_raw = o[0]
+        elif o.ndim == 3:
+            det_raw = o[0]
+
+    if proto_raw is None or det_raw is None:
+        return shapes
+
+    det = det_raw if det_raw.shape[0] < det_raw.shape[1] else det_raw.T
+    nm = proto_raw.shape[2]
+    nc = det.shape[0] - 4 - nm
+    if nc <= 0:
+        return shapes
+
+    boxes = det[:4, :].T
+    scores = det[4 : 4 + nc, :].T
+    mask_coefs = det[4 + nc :, :].T
+
+    cids = np.argmax(scores, axis=1)
+    confs = np.max(scores, axis=1)
+    # parse_lane 함수에서 line 228 바로 위에 추가
+    # print(f"[LANE_DEBUG] max_conf={confs.max():.3f}, mean_conf={confs.mean():.3f}, above_thresh={np.sum(confs > LANE_CONF_THRESH)}")
+    keep = confs > LANE_CONF_THRESH
+    if not np.any(keep):
+        return shapes
+
+    boxes = boxes[keep]
+    confs = confs[keep]
+    cids = cids[keep]
+    mask_coefs = mask_coefs[keep]
+
+    cx, cy, bw, bh = boxes[:, 0], boxes[:, 1], boxes[:, 2], boxes[:, 3]
+    x1 = ((cx - bw / 2) * W).astype(int)
+    y1 = ((cy - bh / 2) * H).astype(int)
+    x2 = ((cx + bw / 2) * W).astype(int)
+    y2 = ((cy + bh / 2) * H).astype(int)
+
+    idx = cv2.dnn.NMSBoxes(
+        np.stack([x1, y1, x2 - x1, y2 - y1], 1).tolist(),
+        confs.tolist(),
+        LANE_CONF_THRESH,
+        LANE_NMS_IOU,
+    )
+    if len(idx) == 0:
+        return shapes
+
+    for ii in idx:
+        i = int(ii)
+        cid = int(cids[i])
+        bx1 = int(np.clip(x1[i], 0, W - 1))
+        by1 = int(np.clip(y1[i], 0, H - 1))
+        bx2 = int(np.clip(x2[i], 0, W - 1))
+        by2 = int(np.clip(y2[i], 0, H - 1))
+
+        # ROI: bbox 중심이 상단 LANE_ROI_TOP 영역 안에 있으면 제거
+        cy_norm = float(((by1 + by2) / 2) / H)
+        if cy_norm < LANE_ROI_TOP:
+            continue
+
+        mask_bin = None
+        if DRAW_LANE_MASK:
+            raw_mask = proto_raw @ mask_coefs[i]
+            raw_mask = 1.0 / (1.0 + np.exp(-raw_mask))
+            mask_full = cv2.resize(raw_mask, (W, H), interpolation=cv2.INTER_LINEAR)
+            mask_bin = np.zeros((H, W), dtype=bool)
+            mask_bin[by1:by2, bx1:bx2] = mask_full[by1:by2, bx1:bx2] > 0.5
+
+        shapes.append(
+            {
+                "class_id": cid,
+                "class_name": LANE_NAMES.get(cid, "?"),
+                "cx_norm": float(((bx1 + bx2) / 2) / W),
+                "cy_norm": cy_norm,
+                "bbox": (bx1, by1, bx2, by2),
+                "conf": float(confs[i]),
+                "mask": mask_bin,
+            }
+        )
+    return _merge_lane_shapes(shapes, H, W)
+
+
+def _merge_lane_shapes(shapes, H, W, cx_gap=0.15):
     """
-    새 lane 모델은 detection-only 후처리 사용.
-    기존 seg용 parse_lane()은 사용하지 않음.
+    같은 클래스끼리 cx_norm 차이가 cx_gap 이내인 박스들을 하나로 합침.
+    위아래로 쪼개진 박스를 하나의 대표 박스로 통합.
+    cx_gap: 같은 차선으로 볼 cx_norm 최대 거리 (기본 0.15 = 화면 너비의 15%)
     """
-    return parse_lane_det(outputs, H, W)
+    if not shapes:
+        return shapes
+
+    # 클래스별로 분리
+    merged = []
+    by_class = {}
+    for s in shapes:
+        by_class.setdefault(s["class_name"], []).append(s)
+
+    for cname, group in by_class.items():
+        # cx_norm 기준 정렬 후 그룹핑
+        group = sorted(group, key=lambda s: s["cx_norm"])
+        clusters = []
+        cur = [group[0]]
+        for s in group[1:]:
+            if s["cx_norm"] - cur[-1]["cx_norm"] <= cx_gap:
+                cur.append(s)
+            else:
+                clusters.append(cur)
+                cur = [s]
+        clusters.append(cur)
+
+        for cluster in clusters:
+            # bbox는 전체를 감싸는 union box
+            bx1 = min(s["bbox"][0] for s in cluster)
+            by1 = min(s["bbox"][1] for s in cluster)
+            bx2 = max(s["bbox"][2] for s in cluster)
+            by2 = max(s["bbox"][3] for s in cluster)
+            best = max(cluster, key=lambda s: s["conf"])
+            merged.append(
+                {
+                    "class_id": best["class_id"],
+                    "class_name": cname,
+                    "cx_norm": float((bx1 + bx2) / 2 / W),
+                    "cy_norm": float((by1 + by2) / 2 / H),
+                    "bbox": (bx1, by1, bx2, by2),
+                    "conf": best["conf"],
+                    "mask": best["mask"],
+                }
+            )
+
+    return merged
+
+
+# ══════════════════════════════════════════════
+# Obstacle 후처리
+# ══════════════════════════════════════════════
+def parse_obstacle(outputs, H, W):
+    dets = []
+    if not outputs:
+        return dets
+    det = outputs[0][0]
+    if det.shape[0] > det.shape[1]:
+        det = det.T
+    if det.shape[0] - 4 <= 0:
+        return dets
+    boxes = det[:4, :].T
+    scores = det[4:, :].T
+    cids = np.argmax(scores, axis=1)
+    confs = np.max(scores, axis=1)
+    keep = confs > OBS_CONF_THRESH
+    if not np.any(keep):
+        return dets
+    boxes = boxes[keep]
+    confs = confs[keep]
+    cids = cids[keep]
+    cx, cy, bw, bh = boxes[:, 0], boxes[:, 1], boxes[:, 2], boxes[:, 3]
+    x1 = ((cx - bw / 2) * W).astype(int)
+    y1 = ((cy - bh / 2) * H).astype(int)
+    x2 = ((cx + bw / 2) * W).astype(int)
+    y2 = ((cy + bh / 2) * H).astype(int)
+    idx = cv2.dnn.NMSBoxes(
+        np.stack([x1, y1, x2 - x1, y2 - y1], 1).tolist(),
+        confs.tolist(),
+        OBS_CONF_THRESH,
+        OBS_NMS_IOU,
+    )
+    if len(idx) == 0:
+        return dets
+    for ii in idx:
+        i = int(ii)
+        cid = int(cids[i])
+        name = OBS_CLASS_NAMES[cid] if cid < len(OBS_CLASS_NAMES) else str(cid)
+        bx1 = int(np.clip(x1[i], 0, W - 1))
+        by1 = int(np.clip(y1[i], 0, H - 1))
+        bx2 = int(np.clip(x2[i], 0, W - 1))
+        by2 = int(np.clip(y2[i], 0, H - 1))
+        area = (bx2 - bx1) * (by2 - by1)
+        dets.append(
+            {
+                "class_id": cid,
+                "class_name": name,
+                "bbox": (bx1, by1, bx2, by2),
+                "conf": float(confs[i]),
+                "area": area,
+            }
+        )
+
+    dets.sort(key=lambda d: (d["area"], d["conf"]), reverse=True)
+    return dets[:1]
 
 
 # ══════════════════════════════════════════════
 # Lane 로직
 # ══════════════════════════════════════════════
-# =========================
-# 3x3 zone helper
-# =========================
-_X1 = 1.0 / 3.0
-_X2 = 2.0 / 3.0
-_Y1 = 1.0 / 3.0
-_Y2 = 2.0 / 3.0
-
-_LANE_MID_X = 0.5
-
-_ZONE_W_TOP = 0.20
-_ZONE_W_MID = 0.30
-_ZONE_W_BOTTOM = 0.50
-
-
-def _x_zone(cx: float) -> str:
-    if cx < _X1:
-        return "left"
-    if cx < _X2:
-        return "center"
-    return "right"
-
-
-def _y_zone(cy: float) -> str:
-    if cy < _Y1:
-        return "top"
-    if cy < _Y2:
-        return "mid"
-    return "bottom"
-
-
-def _zone_weight(cy: float) -> float:
-    z = _y_zone(cy)
-    if z == "bottom":
-        return _ZONE_W_BOTTOM
-    if z == "mid":
-        return _ZONE_W_MID
-    return _ZONE_W_TOP
-
-
-def _has_class(shapes, cls_name, x=None, y=None):
-    for s in shapes:
-        if s["class_name"] != cls_name:
-            continue
-        if x is not None and _x_zone(float(s["cx_norm"])) != x:
-            continue
-        if y is not None and _y_zone(float(s["cy_norm"])) != y:
-            continue
-        return True
-    return False
-
-
-def _count_class(shapes, cls_name, x=None, y=None):
-    c = 0
-    for s in shapes:
-        if s["class_name"] != cls_name:
-            continue
-        if x is not None and _x_zone(float(s["cx_norm"])) != x:
-            continue
-        if y is not None and _y_zone(float(s["cy_norm"])) != y:
-            continue
-        c += 1
-    return c
-
-
 def compute_lane_error(shapes):
-    """
-    straight용 angle 계산
-    - line만 사용
-    - 상/중/하 전체 사용
-    - center only는 제외
-    - left only / right only 허용
-    - 하단에 더 큰 가중치 부여
-    """
+    mid = 0.5
     lines = [s for s in shapes if s["class_name"] == "line"]
+
     if not lines:
         return 0.0, "lost"
 
-    left_pts = []
-    right_pts = []
+    # line 박스가 위아래로 쪼개져서 여러 개 나올 수 있음
+    # → cx_norm < 0.5 인 것들의 평균 = 왼쪽 차선 cx
+    # → cx_norm >= 0.5 인 것들의 평균 = 오른쪽 차선 cx
+    ll = [s["cx_norm"] for s in lines if s["cx_norm"] < mid]
+    rl = [s["cx_norm"] for s in lines if s["cx_norm"] >= mid]
 
-    for s in lines:
-        cx = float(s["cx_norm"])
-        cy = float(s["cy_norm"])
-        w = _zone_weight(cy)
-        xz = _x_zone(cx)
-
-        if xz == "left":
-            left_pts.append((cx, w))
-        elif xz == "right":
-            right_pts.append((cx, w))
-
-    def weighted_mean(items):
-        if not items:
-            return None
-        ws = sum(w for _, w in items)
-        if ws <= 1e-6:
-            return None
-        return sum(x * w for x, w in items) / ws
-
-    left_mean = weighted_mean(left_pts)
-    right_mean = weighted_mean(right_pts)
-
-    if left_mean is None and right_mean is None:
-        return 0.0, "lost"
-
-    if left_mean is not None and right_mean is not None:
-        lane_center = (left_mean + right_mean) * 0.5
-        err = ((_LANE_MID_X - lane_center) / 0.5) * 10.0
-        err = float(np.clip(err, -10.0, 10.0))
+    if ll and rl:
+        center = (np.mean(ll) + np.mean(rl)) / 2
+        err = float(np.clip((center - mid) / mid * 10, -10, 10))
         return err, "ok"
 
-    if left_mean is not None:
-        err = ((_LANE_MID_X - left_mean) / 0.5) * 10.0
-        err = float(np.clip(err, -10.0, 10.0))
+    if ll:
+        err = float(np.clip((np.mean(ll) - mid) / mid * 10, -10, 10))
         return err, "left_only"
 
-    err = ((_LANE_MID_X - right_mean) / 0.5) * 10.0
-    err = float(np.clip(err, -10.0, 10.0))
-    return err, "right_only"
+    if rl:
+        err = float(np.clip((np.mean(rl) - mid) / mid * 10, -10, 10))
+        return err, "right_only"
+
+    return 0.0, "lost"
+
+
+# cy_norm 기준: 0.0=상단, 1.0=하단
+# "상단"  : cy_norm < 0.45  (ROI 제거 후 기준)
+# "하단"  : cy_norm >= 0.55
+# "오른쪽": cx_norm >= 0.5
+# "왼쪽"  : cx_norm < 0.5
+
+_CY_TOP = 0.45  # 이 값보다 작으면 "상단" 탐지
+_CY_BOTTOM = 0.55  # 이 값 이상이면 "하단" 탐지
+_CX_RIGHT = 0.5  # 이 값 이상이면 "오른쪽"
 
 
 def _raw_classify(shapes):
-    left_bottom_curve = _has_class(shapes, "curve", x="left", y="bottom")
+    """
+    현재 프레임 shapes만 보고 raw 유형 반환.
+    반환값:
+      'no_lane' | 'straight' | 'curve_left' | 'left_t'
+      | 'cross_or_down_t'  <- curve 가 좌하단+우하단 동시에 존재
+      | 'pending_eeu'       <- eeu만 단독
+      | None
+    """
+    lines = [s for s in shapes if s["class_name"] == "line"]
+    curves = [s for s in shapes if s["class_name"] == "curve"]
+    eeus = [s for s in shapes if s["class_name"] == "eeu"]
 
-    mid_eeu = _has_class(shapes, "eeu", y="mid")
-    bottom_eeu = _has_class(shapes, "eeu", y="bottom")
-    right_line_any = _has_class(shapes, "line", x="right")
-    has_line_left = _has_class(shapes, "line", x="left")
+    if not lines and not curves and not eeus:
+        return "no_lane"
 
-    eeu_bottom_left = _count_class(shapes, "eeu", x="left", y="bottom")
-    eeu_bottom_center = _count_class(shapes, "eeu", x="center", y="bottom")
-    eeu_bottom_right = _count_class(shapes, "eeu", x="right", y="bottom")
-    eeu_bottom_wide = (
-        sum(
-            [
-                eeu_bottom_left > 0,
-                eeu_bottom_center > 0,
-                eeu_bottom_right > 0,
-            ]
-        )
-        >= 2
-    )
+    # ── straight: line만 존재
+    if lines and not curves and not eeus:
+        return "straight"
 
-    curve_mid_left = _has_class(shapes, "curve", x="left", y="mid")
-    curve_mid_right = _has_class(shapes, "curve", x="right", y="mid")
-    curve_bottom_left = _has_class(shapes, "curve", x="left", y="bottom")
-    curve_bottom_right = _has_class(shapes, "curve", x="right", y="bottom")
-    cross_cond = (curve_mid_left and curve_mid_right) or (
-        curve_bottom_left and curve_bottom_right
-    )
+    # ── curve_left: eeu(상단) + line(오른쪽)
+    if eeus and lines and not curves:
+        eeu_top = any(s["cy_norm"] < _CY_TOP for s in eeus)
+        line_right = any(s["cx_norm"] >= _CX_RIGHT for s in lines)
+        if eeu_top and line_right:
+            return "curve_left"
 
-    if left_bottom_curve:
-        return "left_t"
-    if eeu_bottom_wide:
-        return "down_t"
-    if cross_cond and not eeu_bottom_wide:
-        return "cross"
-    if (mid_eeu or bottom_eeu) and right_line_any and not has_line_left:
-        return "left_t"
+    # ── left_t: curve가 왼쪽에만 있고 + line이 오른쪽에 있음
+    #    curve가 오른쪽에 하나도 없어야 함 (cross_or_down_t와 구분)
+    if curves and lines and not eeus:
+        has_curve_left = any(s["cx_norm"] < _CX_RIGHT for s in curves)
+        has_curve_right = any(s["cx_norm"] >= _CX_RIGHT for s in curves)
+        has_line_right = any(s["cx_norm"] >= _CX_RIGHT for s in lines)
+        # curve가 오른쪽엔 없고 왼쪽에만 있어야 left_t
+        if has_curve_left and not has_curve_right and has_line_right:
+            return "left_t"
+
+    # ── cross_or_down_t: curve가 반드시 좌측 + 우측 동시에 존재해야 함
+    #    (line 유무 무관)
+    if curves:
+        has_curve_left = any(s["cx_norm"] < _CX_RIGHT for s in curves)
+        has_curve_right = any(s["cx_norm"] >= _CX_RIGHT for s in curves)
+        if has_curve_left and has_curve_right:
+            return "cross_or_down_t"
+
+    # ── eeu만 단독 등장
+    if eeus and not curves and not lines:
+        return "pending_eeu"
+
     return None
 
 
 def _resolve_cross_down(shapes):
-    raw = _raw_classify(shapes)
-    if raw in ("left_t", "down_t", "cross"):
-        return raw
+    """
+    cross_or_down_t 이후 단일 프레임으로 판별.
+    - eeu 등장(위치 무관) → down_t  (클래스 불균형으로 cy 낮게 나와도 처리)
+    - curve 2개(좌 상단 + 우 상단) → cross
+    - 그 외 → None (계속 대기)
+    """
+    eeus = [s for s in shapes if s["class_name"] == "eeu"]
+    curves = [s for s in shapes if s["class_name"] == "curve"]
+
+    if eeus:
+        return "down_t"
+
+    curve_left_top = any(
+        s["cx_norm"] < _CX_RIGHT and s["cy_norm"] < _CY_TOP for s in curves
+    )
+    curve_right_top = any(
+        s["cx_norm"] >= _CX_RIGHT and s["cy_norm"] < _CY_TOP for s in curves
+    )
+    if curve_left_top and curve_right_top:
+        return "cross"
+
     return None
 
 
 class IntersectionFSM:
-    def __init__(self, *args, **kwargs):
+    """
+    cross_or_down_t 진입 후엔 [1, err](직진) 계속 내보내면서
+    eeu(상단) 또는 curve 2개(상단 좌+우) 프레임이 올 때까지 무한 대기.
+    나머지 유형은 confirm 프레임 연속 확인 후 hold 동안 유지.
+    """
+
+    def __init__(self, confirm=2, hold=3, maxhist=30):
+        self.confirm = confirm
+        self.hold = hold
+        self.maxhist = maxhist
+        self.consec = 0
+        self.hold_until = 0.0
         self.cur = None
+        self.hist = []
+        self._pending = False  # cross_or_down_t 대기 중
 
     def update(self, shapes):
+        self.hist.append(shapes)
+        if len(self.hist) > self.maxhist:
+            self.hist.pop(0)
+
         raw = _raw_classify(shapes)
-        resolved = _resolve_cross_down(shapes)
-        self.cur = resolved
-        if resolved is None:
+
+        # ── cross_or_down_t 대기 중: 결정적 프레임만 받으면 확정
+        if self._pending:
+            resolved = _resolve_cross_down(shapes)
+            if resolved:
+                self._pending = False
+                self.cur = resolved
+                self.hold_until = time.time() + self.hold
+                return (True, self.cur), raw
+            # 아직 판별 불가 → 직진 신호([1, err]) 계속 출력
             return (False, None), raw
-        return (True, resolved), raw
+
+        # ── cross_or_down_t 또는 pending_eeu 진입
+        if raw in ("cross_or_down_t", "pending_eeu"):
+            self._pending = True
+            self.consec = 0
+            return (False, None), raw
+
+        return self._fsm(raw), raw
+
+    def _fsm(self, raw):
+        now = time.time()
+
+        # hold 중이라도 다른 확실한 패턴이 오면 즉시 갱신
+        if now < self.hold_until:
+            if raw and raw not in ("no_lane", "straight", None) and raw != self.cur:
+                # 새 패턴으로 교체 — hold 리셋
+                self.hold_until = 0.0
+                self.consec = 1
+                self.cur = raw
+            else:
+                return True, self.cur
+
+        if raw in ("no_lane", "straight", None):
+            self.consec = 0
+            return False, None
+
+        self.consec = self.consec + 1 if raw == self.cur else 1
+        self.cur = raw
+        if self.consec >= self.confirm:
+            self.hold_until = now + self.hold
+            self.consec = 0
+            return True, self.cur
+
+        return False, None
+
+
+# ══════════════════════════════════════════════
+# 시각화
+# ══════════════════════════════════════════════
+def _draw_frame(d: dict) -> np.ndarray:
+    frame = d["frame"]
+    shapes = d["shapes"]
+    obs_list = d["obs"]
+    le = d["le"]
+    ls = d["ls"]
+    is_inter = d["is_inter"]
+    itype = d["itype"]
+    raw = d["raw"]
+    scale = d.get("scale", 1.0)
+    progress = d.get("progress", None)
+
+    vis = frame.copy()
+    h, w = vis.shape[:2]
+
+    if DRAW_LANE_MASK:
+        overlay = vis.copy()
+        for s in shapes:
+            col = LANE_COLOR.get(s["class_id"], (200, 200, 200))
+            mask = s.get("mask")
+            if mask is not None and mask.shape == (h, w):
+                overlay[mask] = (
+                    overlay[mask].astype(np.float32) * 0.45
+                    + np.array(col, dtype=np.float32) * 0.55
+                ).astype(np.uint8)
+
+            x1, y1, x2, y2 = s["bbox"]
+            cv2.rectangle(overlay, (x1, y1), (x2, y2), col, 2)
+            cv2.putText(
+                overlay,
+                f"{s['class_name']} {s['conf']:.2f}",
+                (x1, max(y1 - 5, 14)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.42,
+                col,
+                1,
+            )
+        vis = overlay
+    else:
+        for s in shapes:
+            col = LANE_COLOR.get(s["class_id"], (200, 200, 200))
+            x1, y1, x2, y2 = s["bbox"]
+            cv2.rectangle(vis, (x1, y1), (x2, y2), col, 2)
+            cv2.putText(
+                vis,
+                f"{s['class_name']} {s['conf']:.2f}",
+                (x1, max(y1 - 5, 14)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.42,
+                col,
+                1,
+            )
+
+    for o in obs_list:
+        x1, y1, x2, y2 = o["bbox"]
+        col = OBS_PALETTE[o["class_id"] % len(OBS_PALETTE)]
+        cv2.rectangle(vis, (x1, y1), (x2, y2), col, 2)
+        cv2.putText(
+            vis,
+            f"{o['class_name']} {o['conf']:.2f}",
+            (x1, max(y1 - 5, 14)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.42,
+            col,
+            1,
+        )
+
+    by = h - 20
+    bcx = w // 2
+    bx = int(bcx + le * bcx)
+    cv2.line(vis, (0, by), (w, by), (50, 50, 50), 1)
+    cv2.line(vis, (bcx, by), (bx, by), (0, 255, 255), 5)
+    cv2.circle(vis, (bx, by), 7, (0, 255, 255), -1)
+    cv2.line(vis, (bcx, by - 8), (bcx, by + 8), (255, 255, 255), 1)
+
+    cv2.putText(
+        vis,
+        f"err:{le:+.3f} [{ls}]",
+        (8, 24),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.58,
+        (255, 255, 255),
+        2,
+    )
+    cv2.putText(
+        vis,
+        f"raw:{raw or 'none'}",
+        (8, 44),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.46,
+        (160, 160, 160),
+        1,
+    )
+    if is_inter:
+        cv2.putText(
+            vis,
+            f">> {INTER_DESC.get(itype, itype or '')}",
+            (8, 64),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.58,
+            (0, 255, 255),
+            2,
+        )
+
+    if progress is not None:
+        cur, total = progress
+        pct = cur / total if total > 0 else 0
+        bar_w = int(w * pct)
+        cv2.rectangle(vis, (0, h - 6), (w, h), (50, 50, 50), -1)
+        cv2.rectangle(vis, (0, h - 6), (bar_w, h), (0, 200, 100), -1)
+        pct_txt = f"{pct*100:.1f}%  {cur}/{total}f"
+        cv2.putText(
+            vis,
+            pct_txt,
+            (w - 160, h - 8),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.38,
+            (220, 220, 220),
+            1,
+        )
+
+    if obs_list:
+        cv2.putText(
+            vis,
+            f"OBS:{len(obs_list)}",
+            (w - 80, 24),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (0, 200, 255),
+            2,
+        )
+
+    if scale != 1.0:
+        vis = cv2.resize(
+            vis, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_NEAREST
+        )
+    return vis
 
 
 OBS_OUTPUT_ID = {
-    "KNU": 10,
-    "box": 10,
     "SL": 2,
     "person": 3,
     "car": 4,
@@ -484,34 +817,22 @@ OBS_OUTPUT_ID = {
 
 
 def make_output(le, ls, is_inter, itype, obs_list):
-    """
-    ID 체계
-      0  = 차선 없음
-      1  = 일반 차선
-      2  = SL 감지
-      3  = person 감지
-      4  = car 감지
-      5  = parking 감지
-      6  = left_t
-      8  = down_t
-      9  = cross
-      10 = KNU / box / 물류 pass 계열
-    """
     err = round(le, 2)
     result = []
 
     if is_inter:
         inter_id = {
             "left_t": 6,
+            "curve_left": 6,
             "down_t": 8,
-            "cross": 9,
+            "cross": 7,
         }.get(itype)
         if inter_id is not None:
             result.append([inter_id, err])
         else:
             result.append([1, err])
     elif ls == "lost":
-        result.append([0, 0.0])
+        result.append([0, None])
     else:
         result.append([1, err])
 
