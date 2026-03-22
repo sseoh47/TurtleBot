@@ -232,12 +232,12 @@ class DualModelRunner:
             self.obs_worker.push(frame_id, frame)
 
         lane_outs, lane_ms = self.lane_worker.get_result_for(frame_id, timeout=2.0)
-        print("\n=== LANE RAW OUTPUT ===")
-        if lane_outs is None:
-            print("lane_outs is None")
-        else:
-            for i, o in enumerate(lane_outs):
-                print(f"out[{i}] shape={o.shape}, min={o.min()}, max={o.max()}")
+        # print("\n=== LANE RAW OUTPUT ===")
+        # if lane_outs is None:
+        #     print("lane_outs is None")
+        # else:
+        #     for i, o in enumerate(lane_outs):
+        #         print(f"out[{i}] shape={o.shape}, min={o.min()}, max={o.max()}")
 
         if lane_outs is None:
             raise RuntimeError("lane worker timeout")
