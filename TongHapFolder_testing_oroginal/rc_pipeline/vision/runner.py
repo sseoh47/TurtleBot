@@ -213,9 +213,6 @@ class DualModelRunner:
 
     def _infer_serial(self, frame, INF_H, INF_W):
         lane_outs, lane_ms = self.lane_eng.infer(frame)
-        print("\n=== LANE RAW OUTPUT ===")
-        for i, o in enumerate(lane_outs):
-            print(f"out[{i}] shape={o.shape}, min={o.min()}, max={o.max()}")
         lane_shapes = parse_lane_det(lane_outs, INF_H, INF_W)
 
         if self.step_count % self.obs_interval == 0:
@@ -236,6 +233,13 @@ class DualModelRunner:
             self.obs_worker.push(frame_id, frame)
 
         lane_outs, lane_ms = self.lane_worker.get_result_for(frame_id, timeout=2.0)
+        print("\n=== LANE RAW OUTPUT ===")
+        if lane_outs is None:
+            print("lane_outs is None")
+        else:
+            for i, o in enumerate(lane_outs):
+                print(f"out[{i}] shape={o.shape}, min={o.min()}, max={o.max()}")
+
         if lane_outs is None:
             raise RuntimeError("lane worker timeout")
         lane_shapes = parse_lane_det(lane_outs, INF_H, INF_W)
