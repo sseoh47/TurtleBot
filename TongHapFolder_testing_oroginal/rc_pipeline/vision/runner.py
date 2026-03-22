@@ -1,4 +1,3 @@
-## 병렬화적용완
 import time
 import threading
 from dataclasses import dataclass
@@ -113,13 +112,13 @@ class InferWorker(threading.Thread):
 
 class DualModelRunner:
     """
-    기존에 잘 되던 dual_model_edgetpu_v6_origin.py 경로에 맞춘 러너
+    dual_model_edgetpu_v6_origin.py 경로에 맞춘 러너
 
     핵심:
     - runner에서 미리 320x320 resize 하지 않음
     - 원본 frame 그대로 infer()에 넣음
     - resize / RGB 변환 / quantize는 EdgeTPUEngine.preprocess() 내부에 맡김
-    - parse는 원본 해상도(H, W) 기준으로 수행
+    - parse는 모델 입력 해상도(INF_H, INF_W) 기준으로 수행
     - coral 2개면 lane/obs 추론을 내부 worker thread로 병렬 수행
     - obs_interval 적용 가능
     """
@@ -173,7 +172,7 @@ class DualModelRunner:
         else:
             self.lane_eng = EdgeTPUEngine(lane_model, use_edgetpu=use_edgetpu)
             self.obs_eng = EdgeTPUEngine(obs_model, use_edgetpu=use_edgetpu)
-        # print(f"[RUNNER_CAM_CFG] cam_w={cam_w}, cam_h={cam_h}, cam_fps={cam_fps}")
+
         if isinstance(source, int):
             print("[INFO] camera source detected -> use rpicam-vid MJPEG bridge")
             self.cam = RPiMJPEGCamera(
@@ -263,10 +262,8 @@ class DualModelRunner:
         return lane_shapes, lane_ms, obs_list, obs_ms
 
     def _infer_parallel(self, frame_id, frame, INF_H, INF_W):
-        # lane은 항상 수행
         self.lane_worker.push(frame_id, frame)
 
-        # obs는 주기마다만 수행
         run_obs = self.step_count % self.obs_interval == 0
         if run_obs:
             self.obs_worker.push(frame_id, frame)
@@ -311,11 +308,7 @@ class DualModelRunner:
             frame_id = self.step_count
             rx_done_mono = None
 
-        H, W = frame.shape[:2]
-
-        # 모델 입력 해상도 (320x320)
-        # parse_lane/parse_obstacle의 bbox 좌표는 모델 입력 크기 기준으로 역산해야 함
-        # 원본 해상도(H,W)로 역산하면 bbox가 왜곡되어 ROI 필터에 다 걸림
+        # 모델 입력 해상도 기준으로 parse
         INF_H = self.lane_eng.img_h
         INF_W = self.lane_eng.img_w
 
@@ -345,7 +338,9 @@ class DualModelRunner:
                 frame_id, frame, INF_H, INF_W
             )
         else:
-            lane_shapes, lane_ms, obs_list, obs_ms = self._infer_serial(frame, INF_H, INF_W)
+            lane_shapes, lane_ms, obs_list, obs_ms = self._infer_serial(
+                frame, INF_H, INF_W
+            )
 
         p_le, p_ls = compute_lane_error(lane_shapes)
         (p_is, p_it), _ = self.fsm.update(lane_shapes)
