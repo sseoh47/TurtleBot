@@ -62,8 +62,11 @@ extern const int logisticsRoutinePASSLength;
 extern const int parkingRoutineLength;
 
 extern bool timedActionActive;
+extern bool timedActionWait;
+
 extern unsigned long actionStart;
 extern unsigned long actionDuration;
+extern unsigned long waitDuration;
 
 extern BaseAction currentAction;
 extern float currentAngle;
