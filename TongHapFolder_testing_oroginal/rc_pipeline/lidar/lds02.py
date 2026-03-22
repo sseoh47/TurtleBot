@@ -54,7 +54,7 @@ class LDS02:
         self.stage = 0
 
         self.stage4_start = None
-        self.stage4_hold = 2.0   # 4번 action을 2초 유지
+        self.stage4_hold = 2.0  # 4번 action을 2초 유지
 
     def close(self):
         if self.ser.is_open:
@@ -167,8 +167,8 @@ class LDS02:
         except Exception as e:
             print(f"[lidar] update Error")
             return 0
-        d1 = self.is_object_in_range(45, 90, 400)
-        d2 = self.is_object_in_range(90, 100, 350)
+        d1 = self.is_object_in_range(45, 90, 300)
+        d2 = self.is_object_in_range(90, 100, 300)
         d3 = self.is_object_in_range(-15, 15, 300)
         d4 = self.is_object_in_range(-15, 15, 200)
 
