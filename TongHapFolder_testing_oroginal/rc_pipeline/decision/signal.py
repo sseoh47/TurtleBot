@@ -34,7 +34,7 @@ def signal_det(
 
     # 출발 신호는 별도 class 10으로 사용
     if start_signal:
-        return 10, 0.0, 0
+        return 9, 0.0, 0
 
     # 사람 / 차량은 즉시 우선
     if obj_id in (3, 4):
@@ -55,7 +55,7 @@ def signal_det(
 
     # cross는 직진 유지 성격
     if line_id == 9:
-        return 9, angle, lidar_action
+        return 9, 0, 0
 
     # 일반 차선
     if line_id == 1:
