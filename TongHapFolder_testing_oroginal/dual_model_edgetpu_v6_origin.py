@@ -923,29 +923,28 @@ def _draw_frame(d: dict) -> np.ndarray:
 # 객체 클래스명 -> 출력 ID 맵핑 (0~10 체계)
 # KNU, 는 10으로 출력 box는 아직 미정
 OBS_OUTPUT_ID = {
-    "KNU": 10,  #
+    "KNU": 10,
     "box": 10,
-    "SL": 2,  # 2번
-    "person": 3,  # 3번
-    "car": 4,  # 4번
-    "parking": 5,  # 5번
+    "SL": 2,
+    "person": 3,
+    "car": 4,
+    "parking": 5,
 }
 
 
 def make_output(le, ls, is_inter, itype, obs_list):
     """
-    ID 체계: 0~9
-      0 = 차선 없음
-      1 = 차선 인식
-      2 = SL 감지
-      3 = person 감지
-      4 = car 감지
-      5 = parking 감지
-      6 = ㅓ자 교차로
-      7 = + 자 교차로
-      8 = ㅜ자 교차로
-      9 = S들어온상황
-      10 = box 이고SL이 아닌 KNU 상황
+    ID 체계
+      0  = 차선 없음
+      1  = 일반 차선
+      2  = SL 감지
+      3  = person 감지
+      4  = car 감지
+      5  = parking 감지
+      6  = left_t
+      8  = down_t
+      9  = cross
+      10 = KNU / box / 물류 pass 계열
 
     반환: 패킷 리스트
       예) [[1, 0.123], [4, None], [3, None]]
@@ -956,16 +955,15 @@ def make_output(le, ls, is_inter, itype, obs_list):
     if is_inter:
         inter_id = {
             "left_t": 6,
-            "curve_left": 6,
             "down_t": 8,
-            "cross": 7,
+            "cross": 9,
         }.get(itype)
         if inter_id is not None:
             result.append([inter_id, err])
         else:
             result.append([1, err])
     elif ls == "lost":
-        result.append([0, None])
+        result.append([0, 0.0])
     else:
         result.append([1, err])
 
@@ -1539,11 +1537,12 @@ class DualInferenceResult:
 def convert_lane_result(p_le, p_ls, p_is, p_it):
     """
     최종 lane class 체계
-      0 = 차선 없음
-      1 = 일반 차선
-      6 = left_t
-      8 = down_t
-      9 = cross
+      0  = 차선 없음
+      1  = 일반 차선
+      6  = left_t
+      8  = down_t
+      9  = cross
+      10 = 물류 pass 계열 (현재 lane에서는 미사용)
     """
     angle = float(round(p_le, 2))
 
@@ -1565,11 +1564,12 @@ def convert_lane_result(p_le, p_ls, p_is, p_it):
 def convert_object_result(obs_list):
     """
     파일 객체 결과를 최종 obj class 체계로 변환
-      SL      -> 2
-      person  -> 3
-      car     -> 4
-      parking -> 5
-      없음    -> None
+      2  = SL
+      3  = person
+      4  = car
+      5  = parking
+      10 = KNU / box / 물류 pass 계열
+      없음 = None
     """
     if not obs_list:
         return None
@@ -1580,6 +1580,9 @@ def convert_object_result(obs_list):
         "person": 3,
         "car": 4,
         "parking": 5,
+        "KNU": 10,
+        "box": 10,
+        # "pass": 10,
     }
     return obj_map.get(name)
 
@@ -2675,29 +2678,28 @@ def _draw_frame(d: dict) -> np.ndarray:
 # 객체 클래스명 -> 출력 ID 맵핑 (0~10 체계)
 # KNU, 는 10으로 출력 box는 아직 미정
 OBS_OUTPUT_ID = {
-    "KNU": 10,  #
+    "KNU": 10,
     "box": 10,
-    "SL": 2,  # 2번
-    "person": 3,  # 3번
-    "car": 4,  # 4번
-    "parking": 5,  # 5번
+    "SL": 2,
+    "person": 3,
+    "car": 4,
+    "parking": 5,
 }
 
 
 def make_output(le, ls, is_inter, itype, obs_list):
     """
-    ID 체계: 0~9
-      0 = 차선 없음
-      1 = 차선 인식
-      2 = SL 감지
-      3 = person 감지
-      4 = car 감지
-      5 = parking 감지
-      6 = ㅓ자 교차로
-      7 = + 자 교차로
-      8 = ㅜ자 교차로
-      9 = S들어온상황
-      10 = box 이고SL이 아닌 KNU 상황
+    ID 체계
+      0  = 차선 없음
+      1  = 일반 차선
+      2  = SL 감지
+      3  = person 감지
+      4  = car 감지
+      5  = parking 감지
+      6  = left_t
+      8  = down_t
+      9  = cross
+      10 = KNU / box / 물류 pass 계열
 
     반환: 패킷 리스트
       예) [[1, 0.123], [4, None], [3, None]]
@@ -2708,16 +2710,15 @@ def make_output(le, ls, is_inter, itype, obs_list):
     if is_inter:
         inter_id = {
             "left_t": 6,
-            "curve_left": 6,
             "down_t": 8,
-            "cross": 7,
+            "cross": 9,
         }.get(itype)
         if inter_id is not None:
             result.append([inter_id, err])
         else:
             result.append([1, err])
     elif ls == "lost":
-        result.append([0, None])
+        result.append([0, 0.0])
     else:
         result.append([1, err])
 
@@ -3291,11 +3292,12 @@ class DualInferenceResult:
 def convert_lane_result(p_le, p_ls, p_is, p_it):
     """
     최종 lane class 체계
-      0 = 차선 없음
-      1 = 일반 차선
-      6 = left_t
-      8 = down_t
-      9 = cross
+      0  = 차선 없음
+      1  = 일반 차선
+      6  = left_t
+      8  = down_t
+      9  = cross
+      10 = 물류 pass 계열 (현재 lane에서는 미사용)
     """
     angle = float(round(p_le, 2))
 
@@ -3317,11 +3319,12 @@ def convert_lane_result(p_le, p_ls, p_is, p_it):
 def convert_object_result(obs_list):
     """
     파일 객체 결과를 최종 obj class 체계로 변환
-      SL      -> 2
-      person  -> 3
-      car     -> 4
-      parking -> 5
-      없음    -> None
+      2  = SL
+      3  = person
+      4  = car
+      5  = parking
+      10 = KNU / box / 물류 pass 계열
+      없음 = None
     """
     if not obs_list:
         return None
@@ -3332,6 +3335,9 @@ def convert_object_result(obs_list):
         "person": 3,
         "car": 4,
         "parking": 5,
+        "KNU": 10,
+        "box": 10,
+        # "pass": 10,
     }
     return obj_map.get(name)
 
