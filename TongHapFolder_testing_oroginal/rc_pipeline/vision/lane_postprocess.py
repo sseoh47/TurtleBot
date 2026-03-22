@@ -338,47 +338,61 @@ def compute_lane_error(shapes: List[Dict[str, Any]]) -> Tuple[float, str]:
 # intersection / branch classify
 # ======================================
 def _raw_classify(shapes: List[Dict[str, Any]]) -> Optional[str]:
-    # left_t: left-bottom curve
+    # ---------- left_t ----------
+    left_mid_curve = _has_class(shapes, "curve", x="left", y="mid")
     left_bottom_curve = _has_class(shapes, "curve", x="left", y="bottom")
 
-    # left_t: mid/bottom eeu + right line
     mid_eeu = _has_class(shapes, "eeu", y="mid")
     bottom_eeu = _has_class(shapes, "eeu", y="bottom")
     right_line_any = _has_class(shapes, "line", x="right")
     has_line_left = _has_class(shapes, "line", x="left")
 
-    # down_t: bottom eeu wide (2칸 이상)
+    left_t_curve_cond = left_bottom_curve or left_mid_curve
+    left_t_eeu_cond = (mid_eeu or bottom_eeu) and right_line_any and not has_line_left
+
+    # ---------- down_t ----------
     eeu_bottom_left = _count_class(shapes, "eeu", x="left", y="bottom")
     eeu_bottom_center = _count_class(shapes, "eeu", x="center", y="bottom")
     eeu_bottom_right = _count_class(shapes, "eeu", x="right", y="bottom")
-    eeu_bottom_wide = (
-        sum(
-            [
-                eeu_bottom_left > 0,
-                eeu_bottom_center > 0,
-                eeu_bottom_right > 0,
-            ]
-        )
-        >= 2
+
+    eeu_mid_left = _count_class(shapes, "eeu", x="left", y="mid")
+    eeu_mid_center = _count_class(shapes, "eeu", x="center", y="mid")
+    eeu_mid_right = _count_class(shapes, "eeu", x="right", y="mid")
+
+    eeu_bottom_count = sum(
+        [
+            eeu_bottom_left > 0,
+            eeu_bottom_center > 0,
+            eeu_bottom_right > 0,
+        ]
+    )
+    eeu_mid_any = (eeu_mid_left > 0) or (eeu_mid_center > 0) or (eeu_mid_right > 0)
+
+    down_t_cond = (eeu_bottom_count >= 2) or (eeu_bottom_count >= 1 and eeu_mid_any)
+
+    # ---------- cross ----------
+    curve_left_any = _has_class(shapes, "curve", x="left", y="mid") or _has_class(
+        shapes, "curve", x="left", y="bottom"
+    )
+    curve_right_any = _has_class(shapes, "curve", x="right", y="mid") or _has_class(
+        shapes, "curve", x="right", y="bottom"
     )
 
-    # cross: mid/bottom left-right curve pair
-    curve_mid_left = _has_class(shapes, "curve", x="left", y="mid")
-    curve_mid_right = _has_class(shapes, "curve", x="right", y="mid")
-    curve_bottom_left = _has_class(shapes, "curve", x="left", y="bottom")
-    curve_bottom_right = _has_class(shapes, "curve", x="right", y="bottom")
-    cross_cond = (curve_mid_left and curve_mid_right) or (
-        curve_bottom_left and curve_bottom_right
-    )
+    cross_cond = curve_left_any and curve_right_any
 
-    if left_bottom_curve:
+    # ---------- 우선순위 ----------
+    if left_t_curve_cond:
         return "left_t"
-    if eeu_bottom_wide:
+
+    if down_t_cond:
         return "down_t"
-    if cross_cond and not eeu_bottom_wide:
+
+    if cross_cond and not down_t_cond:
         return "cross"
-    if (mid_eeu or bottom_eeu) and right_line_any and not has_line_left:
+
+    if left_t_eeu_cond:
         return "left_t"
+
     return None
 
 
