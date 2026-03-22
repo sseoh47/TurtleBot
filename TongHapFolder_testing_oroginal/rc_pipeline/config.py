@@ -1,6 +1,6 @@
 # rc_pipeline/config.py
 
-LANE_MODEL_PATH = "/home/kyj/dual_origin/lane_v26_edgetpu.tflite"
+LANE_MODEL_PATH = "/home/kyj/dual_origin/0322_RAS_MODEL_EDGETPU.tflite"
 OBS_MODEL_PATH = "/home/kyj/dual_origin/Object_detect_edgetpu.tflite"
 
 CAMERA_SOURCE = 0
@@ -26,7 +26,7 @@ LIDAR_VALID_TIME = 0.2
 SEND_HZ = 20
 
 # 매 프레임 핵심 상태 로그
-DEBUG = False
+DEBUG = True
 
 # 10루프 평균 timing 로그
 DEBUGAVG = True
