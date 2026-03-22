@@ -308,9 +308,9 @@ class DualModelRunner:
         line_id, angle = convert_lane_result(p_le, p_ls, p_is, p_it)
         obj_id = convert_object_result(obs_list)
 
-        print(
-            f"[RUNNER DBG] frame_id={frame_id}, lane_shapes={len(lane_shapes)}, obs={len(obs_list)}, p_le={p_le:.2f}, p_ls={p_ls}, p_is={p_is}, p_it={p_it}, line_id={line_id}, angle={angle}, obj_id={obj_id}"
-        )
+        # print(
+        #     f"[RUNNER DBG] frame_id={frame_id}, lane_shapes={len(lane_shapes)}, obs={len(obs_list)}, p_le={p_le:.2f}, p_ls={p_ls}, p_is={p_is}, p_it={p_it}, line_id={line_id}, angle={angle}, obj_id={obj_id}"
+        # )
 
         step_end_mono = time.monotonic()
         frame_age_start = None

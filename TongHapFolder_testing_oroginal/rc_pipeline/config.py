@@ -26,7 +26,7 @@ LIDAR_VALID_TIME = 0.2
 SEND_HZ = 20
 
 # 매 프레임 핵심 상태 로그
-DEBUG = False
+DEBUG = True
 
 # 10루프 평균 timing 로그
 DEBUGAVG = True
