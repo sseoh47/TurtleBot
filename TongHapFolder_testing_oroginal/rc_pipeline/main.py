@@ -105,7 +105,7 @@ def main():
 
         last_send_time = 0.0
         start_signal_until = 0.0
-        lidar_ignore_until = time.monotonic() + 5.0
+        lidar_ignore_until = time.monotonic() + 10.0
 
         # 10루프 평균 timing 로그용
         avg_every = 10

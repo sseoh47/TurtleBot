@@ -99,11 +99,11 @@ void loop()
 
         case 6:
         case 8:
-            handleTimedAction(ACT_LEFT, -18, 3350);
+            handleTimedAction(ACT_LEFT, -18, 3250);
             break;
 
         case 7:
-            handleTimedAction(ACT_FORWARD, 0, 3000);
+            handleTimedAction(ACT_FORWARD, 0, 3250);
             break;
 
         case 9:

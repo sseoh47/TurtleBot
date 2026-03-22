@@ -20,7 +20,7 @@ void initDrive()
 float normalizeLineAngle(float rawAngle)
 {
     // min, max를 기준으로 정규화 하는 부분 : -100 ~ 100 -> -10 ~ 10
-    rawAngle /= 3.0f; // 10 <- 이부분은 라즈베리에서 최대값 최소값 고려해서 변경해야함.
+    rawAngle /= 3.4f; // 10 <- 이부분은 라즈베리에서 최대값 최소값 고려해서 변경해야함.
 
     // 제한 거는 부분
     if (rawAngle < -30.0f || rawAngle > 30.0f)
