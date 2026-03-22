@@ -73,7 +73,7 @@ void loop()
         driveMode = MODE_MANUAL;
     }
 
-    if (timedActionActive)
+    if (timedActionWait || timedActionActive)
     {
         handleTimedAction(currentAction, currentAngle, actionDuration);
         return;
@@ -88,7 +88,7 @@ void loop()
 
         case 1:
             if (action) handleSpecialTarget(class_, angle, action);
-            else handleLineFollow(angle);
+            else handleLineFollow(normalizeLineAngle(angle));
             break;
 
         case 2:
@@ -99,7 +99,7 @@ void loop()
 
         case 6:
         case 8:
-            handleTimedAction(ACT_LEFT, -30, 2000);
+            handleTimedAction(ACT_LEFT, -18, 3350);
             break;
 
         case 7:

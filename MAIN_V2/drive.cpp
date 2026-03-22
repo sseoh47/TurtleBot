@@ -15,6 +15,25 @@ void initDrive()
 }
 
 // =========================
+// 조향 정규화
+// =========================
+float normalizeLineAngle(float rawAngle)
+{
+    // min, max를 기준으로 정규화 하는 부분 : -100 ~ 100 -> -10 ~ 10
+    rawAngle /= 3.0f; // 10 <- 이부분은 라즈베리에서 최대값 최소값 고려해서 변경해야함.
+
+    // 제한 거는 부분
+    if (rawAngle < -30.0f || rawAngle > 30.0f)
+        return 0.0f;
+    if (rawAngle < -10.0f)
+        return -10.0f;
+    if (rawAngle > 10.0f)
+        return 10.0f;
+    return rawAngle;
+}
+
+
+// =========================
 // 실제 모터 명령 실행
 // =========================
 void executeBaseAction(BaseAction act, float angle, float speedOffset)
@@ -84,8 +103,11 @@ void handleLineFollow(float angle)
 // class 6,8:좌회전 / 7:직진 통합
 // =========================
 bool timedActionActive = false;     // 시간 행동 진행 여부
+bool timedActionWait = false;
+
 unsigned long actionStart = 0;      // 시작 시각
 unsigned long actionDuration = 0;   // 유지 시간(ms)
+unsigned long waitDuration=3200;
 
 BaseAction currentAction;           // ACT_LEFT / ACT_FORWARD ...
 float currentAngle = 0;             // 조향각
@@ -97,23 +119,40 @@ void handleTimedAction(BaseAction act, float angle, unsigned long duration)
         return;
 
     // 처음 진입 시 시작 세팅
-    if (!timedActionActive)
+    if (!timedActionActive && !timedActionWait)
     {
-        timedActionActive = true;
+        timedActionWait = true;
         actionStart = millis();
         actionDuration = duration;
         currentAction = act;
         currentAngle = angle;
+        return;
     }
 
-    // 행동 유지
-    executeBaseAction(currentAction, currentAngle);
-
-    // 시간 종료 체크
-    if (millis() - actionStart >= actionDuration)
+    // 1단계: 대기
+    if (timedActionWait)
     {
-        timedActionActive = false;
-        // executeBaseAction(ACT_FORWARD, 0);   // 기본 직진 복귀
+        // 대기 중에는 기존 차선 주행 유지
+        executeBaseAction(ACT_FORWARD, heldDriveAngle);
+
+        if (millis() - actionStart >= waitDuration)
+        {
+            timedActionWait = false;
+            timedActionActive = true;
+            actionStart = millis();   // 이제 실제 행동 시작 시각으로 다시 저장
+        }
+        return;
+    }
+
+    // 2단계: 실제 행동 수행
+    if (timedActionActive)
+    {
+        executeBaseAction(currentAction, currentAngle);
+
+        if (millis() - actionStart >= actionDuration)
+        {
+            timedActionActive = false;
+        }
     }
 }
 

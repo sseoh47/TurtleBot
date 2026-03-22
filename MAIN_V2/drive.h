@@ -62,8 +62,11 @@ extern const int logisticsRoutinePASSLength;
 extern const int parkingRoutineLength;
 
 extern bool timedActionActive;
+extern bool timedActionWait;
+
 extern unsigned long actionStart;
 extern unsigned long actionDuration;
+extern unsigned long waitDuration;
 
 extern BaseAction currentAction;
 extern float currentAngle;
@@ -78,6 +81,8 @@ void initDrive();
 void updateStartupRoutine();
 
 // ================= 일반 주행 처리 =================
+float normalizeLineAngle(float rawAngle);
+
 void handleLineLost();
 void handleLineFollow(float angle);
 // void handleStraight(float angle);
