@@ -162,7 +162,7 @@ class DualModelRunner:
                 raise RuntimeError(f"source open failed: {source}")
 
         self.fsm = IntersectionFSM()
-        self._printed_input_info = False
+        self._printed_input_info = True
 
         self.lane_worker = None
         self.obs_worker = None
@@ -213,6 +213,9 @@ class DualModelRunner:
 
     def _infer_serial(self, frame, INF_H, INF_W):
         lane_outs, lane_ms = self.lane_eng.infer(frame)
+        print("\n=== LANE RAW OUTPUT ===")
+        for i, o in enumerate(lane_outs):
+            print(f"out[{i}] shape={o.shape}, min={o.min()}, max={o.max()}")
         lane_shapes = parse_lane_det(lane_outs, INF_H, INF_W)
 
         if self.step_count % self.obs_interval == 0:
