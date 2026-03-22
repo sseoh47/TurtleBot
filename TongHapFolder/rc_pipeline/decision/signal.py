@@ -44,7 +44,9 @@ def signal_det(
     if line_id == 1 and lidar_action != 0:
         return 1, angle, lidar_action
 
-    if line_id in (6, 7, 8):
+    if line_id in (6, 8):
+        return line_id, None, 0
+    if line_id == 7:
         return line_id, None, 0
 
     if line_id == 1:
