@@ -188,7 +188,7 @@ def build_debug_frame(
     capture_width: int,
     capture_height: int,
 ) -> np.ndarray:
-    debug = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
+    debug = frame_rgb.copy()
     overlay = debug.copy()
     overlay[mask > 0] = (0, 255, 0)
     debug = cv2.addWeighted(overlay, 0.35, debug, 0.65, 0.0)
