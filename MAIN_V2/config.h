@@ -15,7 +15,7 @@
 #define RIGHT_ID 2
 
 // ===================== Drive Parameters ===============
-#define BASE_RPM 15.0f
+#define BASE_RPM 30.0f
 #define MAX_RPM 60.0f
 #define MIN_RPM -60.0f
 

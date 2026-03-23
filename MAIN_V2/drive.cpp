@@ -83,7 +83,7 @@ void handleLineLost()
     if (driveMode == MODE_EMERGENCY || driveMode == MODE_ROUTINE || driveMode == MODE_LOGISTICIn)
         return;
 
-    executeBaseAction(ACT_FORWARD, 0);
+    executeBaseAction(ACT_SLOW, 0);
 }
 
 // =========================
@@ -96,7 +96,7 @@ void handleLineFollow(float angle)
         return;
 
     heldDriveAngle = angle;
-    executeBaseAction(ACT_FORWARD, angle);
+    executeBaseAction(ACT_SLOW, angle);
 }
 
 // =========================

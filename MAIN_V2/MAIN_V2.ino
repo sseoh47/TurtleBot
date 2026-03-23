@@ -73,6 +73,14 @@ void loop()
         driveMode = MODE_MANUAL;
     }
 
+    if (timedActionWait && class_ == 7 && currentAction != ACT_FORWARD)
+    {
+        timedActionWait = false;
+        timedActionActive = false;
+        handleTimedAction(ACT_FORWARD, 0, 3250);
+        return;
+    }
+
     if (timedActionWait || timedActionActive)
     {
         handleTimedAction(currentAction, currentAngle, actionDuration);
