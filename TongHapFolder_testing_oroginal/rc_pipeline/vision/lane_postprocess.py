@@ -10,7 +10,7 @@ OBS_CLASS_NAMES = ["KNU", "SL", "box", "car", "parking", "person"]
 
 LANE_CONF_THRESH = 0.45
 LANE_NMS_IOU = 0.45
-OBS_CONF_THRESH = 0.25
+OBS_CONF_THRESH = 0.75
 OBS_NMS_IOU = 0.45
 
 # straight는 상/중/하 전부 사용하므로 상단 ROI는 자르지 않음
