@@ -32,8 +32,11 @@ CV_LANE_SLOPE_SUM_LIMIT = 0.30
 CV_CENTER_BLACK_Y_START_RATIO = 0.60
 CV_CENTER_BLACK_Y_END_RATIO = 0.70
 CV_CENTER_BLACK_HALF_WIDTH_RATIO = 0.08
-CV_CENTER_TAPE_GRAY_MIN = 30.0
-CV_CENTER_TAPE_GRAY_MAX = 80.0
+CV_CENTER_TAPE_R_MAX = 50
+CV_CENTER_TAPE_G_MIN = 100
+CV_CENTER_TAPE_G_MAX = 200
+CV_CENTER_TAPE_B_MIN = 200
+CV_CENTER_TAPE_MIN_PIXELS = 1
 
 
 def _resize_for_cv_lane(frame):
@@ -103,8 +106,7 @@ def detect_cv_center_black(frame):
         return False
 
     lane_frame = _resize_for_cv_lane(frame)
-    gray = cv2.cvtColor(lane_frame, cv2.COLOR_BGR2GRAY)
-    height, width = gray.shape
+    height, width = lane_frame.shape[:2]
 
     y1 = int(height * CV_CENTER_BLACK_Y_START_RATIO)
     y2 = int(height * CV_CENTER_BLACK_Y_END_RATIO)
@@ -113,15 +115,20 @@ def detect_cv_center_black(frame):
     x1 = max(0, mid - half_w)
     x2 = min(width, mid + half_w)
 
-    center_roi = gray[y1:y2, x1:x2]
+    center_roi = lane_frame[y1:y2, x1:x2]
     if center_roi.size == 0:
         return False
 
+    b = center_roi[:, :, 0]
+    g = center_roi[:, :, 1]
+    r = center_roi[:, :, 2]
     in_range = (
-        (center_roi >= CV_CENTER_TAPE_GRAY_MIN)
-        & (center_roi <= CV_CENTER_TAPE_GRAY_MAX)
+        (r <= CV_CENTER_TAPE_R_MAX)
+        & (g >= CV_CENTER_TAPE_G_MIN)
+        & (g <= CV_CENTER_TAPE_G_MAX)
+        & (b >= CV_CENTER_TAPE_B_MIN)
     )
-    return bool(np.any(in_range))
+    return int(np.count_nonzero(in_range)) >= CV_CENTER_TAPE_MIN_PIXELS
 
 
 def compute_cv_lane_angle(frame, fallback_angle):
