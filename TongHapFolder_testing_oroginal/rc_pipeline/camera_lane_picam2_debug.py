@@ -39,11 +39,11 @@ DEBUG_PRINT_INTERVAL = 0.5
 SHOW_DEBUG = True
 STARTUP_SIGNAL_SECONDS = 3.0
 STARTUP_SEND_INTERVAL = 0.05
-CENTER_BLACK_Y_START_RATIO = 0.70
-CENTER_BLACK_Y_END_RATIO = 0.92
+CENTER_BLACK_Y_START_RATIO = 0.6
+CENTER_BLACK_Y_END_RATIO = 0.7
 CENTER_BLACK_HALF_WIDTH_RATIO = 0.08
-CENTER_TAPE_GRAY_MIN = 40.0
-CENTER_TAPE_GRAY_MAX = 60.0
+CENTER_TAPE_GRAY_MIN = 30.0
+CENTER_TAPE_GRAY_MAX = 80.0
 
 # Send steering in the -10 to +10 range.
 TX_ANGLE_SCALE = 2.0
@@ -149,8 +149,9 @@ def detect_center_tape(
         return False, 255.0, (x1, y1, x2, y2)
 
     mean_gray = float(center_roi.mean())
+    in_range = (center_roi >= CENTER_TAPE_GRAY_MIN) & (center_roi <= CENTER_TAPE_GRAY_MAX)
     return (
-        CENTER_TAPE_GRAY_MIN <= mean_gray <= CENTER_TAPE_GRAY_MAX,
+        bool(np.any(in_range)),
         mean_gray,
         (x1, y1, x2, y2),
     )
