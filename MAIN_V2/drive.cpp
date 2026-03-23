@@ -138,7 +138,7 @@ void handleTimedAction(BaseAction act, float angle, unsigned long duration)
     if (timedActionWait)
     {
         // 대기 중에는 기존 차선 주행 유지
-        executeBaseAction(ACT_FORWARD, heldDriveAngle);
+        executeBaseAction(ACT_FORWARD, 0);
 
         if (millis() - actionStart >= waitDuration)
         {
