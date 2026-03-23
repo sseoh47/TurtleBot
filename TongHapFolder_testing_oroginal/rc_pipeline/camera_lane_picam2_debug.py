@@ -150,16 +150,10 @@ def detect_center_tape(
     if center_roi.size == 0:
         return False, (0.0, 0.0, 0.0), 0, (x1, y1, x2, y2)
 
-    # Picamera/OpenCV path in this script behaves as BGR on display,
-    # so convert channel order here before applying RGB thresholds.
-    b = center_roi[:, :, 0]
+    r = center_roi[:, :, 0]
     g = center_roi[:, :, 1]
-    r = center_roi[:, :, 2]
-    mean_rgb = (
-        float(r.mean()),
-        float(g.mean()),
-        float(b.mean()),
-    )
+    b = center_roi[:, :, 2]
+    mean_rgb = tuple(float(v) for v in center_roi.reshape(-1, 3).mean(axis=0))
     in_range = (
         (r <= CENTER_TAPE_R_MAX)
         & (g >= CENTER_TAPE_G_MIN)
