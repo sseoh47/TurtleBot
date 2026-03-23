@@ -19,7 +19,7 @@ from vision.lane_postprocess import (
 from vision.postprocess import convert_lane_result, convert_object_result
 
 
-CV_LANE_PROC_WIDTH = 320
+CV_LANE_PROC_SIZE = 320
 CV_LANE_ROI_TOP_RATIO = 0.6
 CV_LANE_THRESHOLD = 200
 CV_LANE_ROW_HALF_HEIGHT = 3
@@ -27,19 +27,26 @@ CV_LANE_MIN_SIDE_PIXELS = 8
 CV_LANE_ROW_RATIOS = (0.75, 0.50, 0.25)
 CV_LANE_SIDE_MIN_PIXELS = 60
 CV_LANE_MAX_STEER = 10.0
-CV_LANE_SEARCH_STEER = 5.0
+CV_LANE_SEARCH_STEER = 10.0
 CV_LANE_SLOPE_SUM_LIMIT = 0.30
 
 
 def _resize_for_cv_lane(frame):
     height, width = frame.shape[:2]
     if height <= 0 or width <= 0:
-        return frame
+        return np.zeros((CV_LANE_PROC_SIZE, CV_LANE_PROC_SIZE, 3), dtype=np.uint8)
 
-    target_width = min(CV_LANE_PROC_WIDTH, width)
-    target_height = max(1, int(round(height * (target_width / float(width)))))
-    interp = cv2.INTER_AREA if target_width < width else cv2.INTER_LINEAR
-    return cv2.resize(frame, (target_width, target_height), interpolation=interp)
+    scale = min(CV_LANE_PROC_SIZE / float(width), CV_LANE_PROC_SIZE / float(height))
+    out_width = max(1, int(round(width * scale)))
+    out_height = max(1, int(round(height * scale)))
+    interp = cv2.INTER_AREA if scale < 1.0 else cv2.INTER_LINEAR
+    resized = cv2.resize(frame, (out_width, out_height), interpolation=interp)
+
+    canvas = np.zeros((CV_LANE_PROC_SIZE, CV_LANE_PROC_SIZE, 3), dtype=np.uint8)
+    offset_x = (CV_LANE_PROC_SIZE - out_width) // 2
+    offset_y = (CV_LANE_PROC_SIZE - out_height) // 2
+    canvas[offset_y:offset_y + out_height, offset_x:offset_x + out_width] = resized
+    return canvas
 
 
 def _extract_cv_lane_mask(frame):
@@ -121,7 +128,7 @@ def compute_cv_lane_angle(frame, fallback_angle):
     if right_detected and not left_detected:
         return -CV_LANE_SEARCH_STEER
     if not left_detected and not right_detected:
-        return float(fallback_angle)
+        return 0.0
 
     if len(left_points) >= 2 and len(right_points) >= 2:
         left_slope = _fit_cv_lane_slope(left_points)
@@ -247,6 +254,7 @@ class DualModelRunner:
         self.step_count = 0
         self.prev_obs_list = []
         self.prev_obs_ms = 0.0
+        self.cv_lane_last_angle = 0.0
 
         self.parallel_mode = bool(coral == 2 and use_edgetpu)
 
@@ -422,7 +430,8 @@ class DualModelRunner:
 
         line_id, angle = convert_lane_result(p_le, p_ls, p_is, p_it)
         if line_id == 1:
-            angle = compute_cv_lane_angle(frame, angle)
+            angle = compute_cv_lane_angle(frame, self.cv_lane_last_angle)
+            self.cv_lane_last_angle = angle
         obj_id = convert_object_result(obs_list)
 
         # print(
