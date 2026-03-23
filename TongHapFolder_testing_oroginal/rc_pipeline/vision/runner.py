@@ -185,6 +185,7 @@ class DualInferenceResult:
     obj_id: Optional[int]
     lane_status: str
     inter_type: Optional[str]
+    center_tape: bool = False
     frame_id: Optional[int] = None
     frame_age_start: Optional[float] = None
     frame_age_end: Optional[float] = None
@@ -467,7 +468,8 @@ class DualModelRunner:
         (p_is, p_it), _ = self.fsm.update(lane_shapes)
 
         line_id, angle = convert_lane_result(p_le, p_ls, p_is, p_it)
-        if detect_cv_center_black(frame):
+        center_tape = detect_cv_center_black(frame)
+        if center_tape:
             line_id = 7
             angle = 0.0
         elif line_id == 1:
@@ -492,6 +494,7 @@ class DualModelRunner:
             obj_id=obj_id,
             lane_status=p_ls,
             inter_type=p_it if p_is else None,
+            center_tape=center_tape,
             frame_id=frame_id,
             frame_age_start=frame_age_start,
             frame_age_end=frame_age_end,
