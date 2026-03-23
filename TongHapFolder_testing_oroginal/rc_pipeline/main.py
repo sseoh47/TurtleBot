@@ -230,13 +230,9 @@ def main():
 
             now = time.monotonic()
             if now - last_send_time >= 1.0 / SEND_HZ:
-                tx_angle = final_angle
-                if final_class == 1 and tx_angle is not None:
-                    tx_angle *= 10.0
-
                 cmd = FinalCommand(
                     class_id=final_class,
-                    angle=tx_angle,
+                    angle=final_angle,
                     action=final_action,
                     status=(
                         f"obj={result.obj_id}, "
