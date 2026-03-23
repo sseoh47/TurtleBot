@@ -51,6 +51,44 @@ from config import (
 )
 
 
+ENABLE_ARDUINO_SEND_TIMING = True
+ARDUINO_SEND_TIMING_EVERY = 20
+ARDUINO_SEND_TIMING_PRINT_EACH = False
+
+
+class ArduinoSendTimingLogger:
+    """Set ENABLE_ARDUINO_SEND_TIMING=False to disable runtime logs quickly."""
+
+    def __init__(self, enabled: bool, report_every: int, print_each: bool):
+        self.enabled = enabled
+        self.report_every = max(1, int(report_every))
+        self.print_each = print_each
+        self.count = 0
+        self.sum_ms = 0.0
+        self.max_ms = 0.0
+
+    def record(self, elapsed_ms: float) -> None:
+        if not self.enabled:
+            return
+
+        self.count += 1
+        self.sum_ms += elapsed_ms
+        self.max_ms = max(self.max_ms, elapsed_ms)
+
+        if self.print_each:
+            print(f"[TX] arduino_send={elapsed_ms:.3f}ms")
+
+        if self.count >= self.report_every:
+            avg_ms = self.sum_ms / self.count
+            print(
+                f"[TXAVG{self.count}] arduino_send avg={avg_ms:.3f}ms, "
+                f"last={elapsed_ms:.3f}ms, max={self.max_ms:.3f}ms"
+            )
+            self.count = 0
+            self.sum_ms = 0.0
+            self.max_ms = 0.0
+
+
 def get_key_nonblock():
     """
     엔터 없이 키 1개 읽기.
@@ -106,6 +144,11 @@ def main():
         last_send_time = 0.0
         start_signal_until = 0.0
         lidar_ignore_until = time.monotonic() + 10.0
+        send_timing_logger = ArduinoSendTimingLogger(
+            enabled=ENABLE_ARDUINO_SEND_TIMING,
+            report_every=ARDUINO_SEND_TIMING_EVERY,
+            print_each=ARDUINO_SEND_TIMING_PRINT_EACH,
+        )
 
         # 10루프 평균 timing 로그용
         avg_every = 10
@@ -245,7 +288,13 @@ def main():
                     ),
                 )
 
-                arduino.send(cmd)
+                if send_timing_logger.enabled:
+                    send_started = time.perf_counter()
+                    arduino.send(cmd)
+                    send_elapsed_ms = (time.perf_counter() - send_started) * 1000.0
+                    send_timing_logger.record(send_elapsed_ms)
+                else:
+                    arduino.send(cmd)
                 last_send_time = now
 
     finally:
