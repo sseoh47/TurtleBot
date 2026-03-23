@@ -1,6 +1,17 @@
 from typing import Optional, Tuple
 
 
+MAX_DRIVE_ANGLE = 10.0
+
+
+def clamp_drive_angle(angle: float) -> float:
+    if angle < -MAX_DRIVE_ANGLE:
+        return -MAX_DRIVE_ANGLE
+    if angle > MAX_DRIVE_ANGLE:
+        return MAX_DRIVE_ANGLE
+    return angle
+
+
 def signal_det(
     obj_id: Optional[int],
     line_id: Optional[int],
@@ -46,7 +57,7 @@ def signal_det(
 
     # 일반 차선 + 라이다 동작 있으면 그대로 반영
     if line_id == 1 and lidar_action != 0:
-        return 1, angle, lidar_action
+        return 1, clamp_drive_angle(angle), lidar_action
 
     # 특수 lane 상황
     # left_t / down_t 는 임베디드에서 별도 처리
@@ -59,7 +70,7 @@ def signal_det(
 
     # 일반 차선
     if line_id == 1:
-        return 1, angle, lidar_action
+        return 1, clamp_drive_angle(angle), lidar_action
 
     # 차선 없음
     return 0, 0.0, lidar_action

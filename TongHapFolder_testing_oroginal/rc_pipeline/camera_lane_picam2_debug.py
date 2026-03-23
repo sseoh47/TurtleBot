@@ -39,8 +39,8 @@ SHOW_DEBUG = True
 STARTUP_SIGNAL_SECONDS = 3.0
 STARTUP_SEND_INTERVAL = 0.05
 
-# MAIN_V2 normalizes incoming angle by dividing by 10.
-TX_ANGLE_SCALE = 10.0
+# Send steering in the -10 to +10 range.
+TX_ANGLE_SCALE = 2.0
 
 
 def send_packet(
