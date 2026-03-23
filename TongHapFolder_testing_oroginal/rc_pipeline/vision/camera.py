@@ -23,29 +23,32 @@ class RPiMJPEGCamera:
 
         self.lock = threading.Lock()
         self.alive = True
+        self.thread = None
 
         cmd = [
             "rpicam-vid",
-            "-t",
-            "0",
-            "--nopreview",
-            "--codec",
-            "mjpeg",
             "--width",
             str(width),
             "--height",
             str(height),
             "--framerate",
             str(framerate),
+            "--codec",
+            "mjpeg",
+            "--nopreview",
+            "--timeout",
+            "0",
             "-o",
             "-",
         ]
 
+        print(f"[INFO] rpicam-vid: {width}x{height} @ {framerate}fps (mjpeg)")
+
         self.proc = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            bufsize=0,
+            stderr=subprocess.PIPE,
+            bufsize=1024 * 1024,
         )
 
         if self.proc.stdout is None:
@@ -54,16 +57,31 @@ class RPiMJPEGCamera:
         self.thread = threading.Thread(target=self._reader_loop, daemon=True)
         self.thread.start()
 
-        deadline = time.monotonic() + 2.0
+        deadline = time.monotonic() + 5.0
         while time.monotonic() < deadline:
             with self.lock:
                 if self.latest_frame is not None:
                     break
+            if self.proc.poll() is not None:
+                raise RuntimeError(self._build_camera_error("rpicam-vid exited before first frame"))
             time.sleep(0.01)
+
+        with self.lock:
+            if self.latest_frame is None:
+                raise RuntimeError(self._build_camera_error("timeout waiting for first camera frame"))
+
+    def _build_camera_error(self, prefix):
+        if self.proc.poll() is None or self.proc.stderr is None:
+            return prefix
+
+        stderr_text = self.proc.stderr.read().decode("utf-8", errors="replace").strip()
+        if stderr_text:
+            return f"{prefix}: {stderr_text}"
+        return prefix
 
     def _reader_loop(self):
         while self.alive:
-            chunk = self.proc.stdout.read(4096)
+            chunk = self.proc.stdout.read(65536)
             if not chunk:
                 break
 
@@ -131,3 +149,6 @@ class RPiMJPEGCamera:
                 self.proc.kill()
             except Exception:
                 pass
+        finally:
+            if self.thread is not None and self.thread.is_alive():
+                self.thread.join(timeout=1.0)

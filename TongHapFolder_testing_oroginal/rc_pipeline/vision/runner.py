@@ -454,8 +454,10 @@ class DualModelRunner:
         try:
             if self.lane_worker is not None:
                 self.lane_worker.stop()
+                self.lane_worker.join(timeout=1.0)
             if self.obs_worker is not None:
                 self.obs_worker.stop()
+                self.obs_worker.join(timeout=1.0)
         except Exception:
             pass
 
