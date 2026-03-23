@@ -48,6 +48,8 @@ CENTER_TAPE_G_MIN = 130
 CENTER_TAPE_G_MAX = 220
 CENTER_TAPE_B_MIN = 180
 CENTER_TAPE_B_MAX = 255
+CENTER_TAPE_G_OVER_R_MIN = 40
+CENTER_TAPE_B_OVER_G_MIN = 20
 CENTER_TAPE_MIN_PIXELS = 5
 
 # Send steering in the -10 to +10 range.
@@ -159,7 +161,9 @@ def detect_center_tape(
     in_range = (
         (r >= CENTER_TAPE_R_MIN) & (r <= CENTER_TAPE_R_MAX) &
         (g >= CENTER_TAPE_G_MIN) & (g <= CENTER_TAPE_G_MAX) &
-        (b >= CENTER_TAPE_B_MIN) & (b <= CENTER_TAPE_B_MAX)
+        (b >= CENTER_TAPE_B_MIN) & (b <= CENTER_TAPE_B_MAX) &
+        ((g - r) >= CENTER_TAPE_G_OVER_R_MIN) &
+        ((b - g) >= CENTER_TAPE_B_OVER_G_MIN)
     )
     match_count = int(np.count_nonzero(in_range))
     return (
