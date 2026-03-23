@@ -42,7 +42,8 @@ STARTUP_SEND_INTERVAL = 0.05
 CENTER_BLACK_Y_START_RATIO = 0.70
 CENTER_BLACK_Y_END_RATIO = 0.92
 CENTER_BLACK_HALF_WIDTH_RATIO = 0.08
-CENTER_BLACK_WHITE_RATIO_MAX = 0.02
+CENTER_TAPE_GRAY_MIN = 40.0
+CENTER_TAPE_GRAY_MAX = 60.0
 
 # Send steering in the -10 to +10 range.
 TX_ANGLE_SCALE = 2.0
@@ -131,10 +132,11 @@ def normalize_steer(value: float, limit: float) -> float:
     return float(np.clip((value / limit) * MAX_STEER, -MAX_STEER, MAX_STEER))
 
 
-def detect_center_black(
-    mask: np.ndarray,
+def detect_center_tape(
+    frame_rgb: np.ndarray,
 ) -> tuple[bool, float, tuple[int, int, int, int]]:
-    height, width = mask.shape
+    gray = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2GRAY)
+    height, width = gray.shape
     y1 = int(height * CENTER_BLACK_Y_START_RATIO)
     y2 = int(height * CENTER_BLACK_Y_END_RATIO)
     mid = width // 2
@@ -142,12 +144,16 @@ def detect_center_black(
     x1 = max(0, mid - half_w)
     x2 = min(width, mid + half_w)
 
-    center_roi = mask[y1:y2, x1:x2]
+    center_roi = gray[y1:y2, x1:x2]
     if center_roi.size == 0:
-        return False, 1.0, (x1, y1, x2, y2)
+        return False, 255.0, (x1, y1, x2, y2)
 
-    white_ratio = cv2.countNonZero(center_roi) / float(center_roi.size)
-    return white_ratio <= CENTER_BLACK_WHITE_RATIO_MAX, white_ratio, (x1, y1, x2, y2)
+    mean_gray = float(center_roi.mean())
+    return (
+        CENTER_TAPE_GRAY_MIN <= mean_gray <= CENTER_TAPE_GRAY_MAX,
+        mean_gray,
+        (x1, y1, x2, y2),
+    )
 
 
 def build_debug_frame(
@@ -155,8 +161,8 @@ def build_debug_frame(
     mask: np.ndarray,
     steer: float,
     tx_class_id: int,
-    center_black: bool,
-    center_white_ratio: float,
+    center_tape: bool,
+    center_gray_mean: float,
     center_rect: tuple[int, int, int, int],
     left_count: int,
     right_count: int,
@@ -207,7 +213,7 @@ def build_debug_frame(
     )
     cv2.putText(
         debug,
-        f"class={tx_class_id} center_black={'Y' if center_black else 'N'} ratio={center_white_ratio:.3f}",
+        f"case={tx_class_id} center_tape={'Y' if center_tape else 'N'} gray={center_gray_mean:.1f}",
         (10, 84),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.55,
@@ -225,7 +231,7 @@ def build_debug_frame(
     )
 
     x1, y1, x2, y2 = center_rect
-    rect_color = (0, 0, 255) if center_black else (255, 255, 0)
+    rect_color = (0, 0, 255) if center_tape else (255, 255, 0)
     cv2.rectangle(debug, (x1, y1), (x2, y2), rect_color, 2)
     return debug
 
@@ -303,9 +309,9 @@ def main() -> None:
             proc_rgb = resize_letterbox(frame_rgb, args.proc_size)
             mask = extract_mask(proc_rgb)
             last_steer, left_count, right_count = compute_steer(mask, last_steer)
-            center_black, center_white_ratio, center_rect = detect_center_black(mask)
-            tx_class_id = CLASS_CENTER_BLACK if center_black else CLASS_LINE_FOLLOW
-            tx_angle = 0.0 if center_black else last_steer * TX_ANGLE_SCALE
+            center_tape, center_gray_mean, center_rect = detect_center_tape(proc_rgb)
+            tx_class_id = CLASS_CENTER_BLACK if center_tape else CLASS_LINE_FOLLOW
+            tx_angle = 0.0 if center_tape else last_steer * TX_ANGLE_SCALE
 
             if ser is not None:
                 send_packet(ser, tx_angle, class_id=tx_class_id)
@@ -316,8 +322,8 @@ def main() -> None:
                     mask,
                     last_steer,
                     tx_class_id,
-                    center_black,
-                    center_white_ratio,
+                    center_tape,
+                    center_gray_mean,
                     center_rect,
                     left_count,
                     right_count,
@@ -336,7 +342,7 @@ def main() -> None:
                     f"proc={args.proc_size}x{args.proc_size} "
                     f"left_pixels={left_count} right_pixels={right_count} "
                     f"steer={last_steer:.1f} class={tx_class_id} "
-                    f"center_black={center_black} ratio={center_white_ratio:.3f}",
+                    f"center_tape={center_tape} gray={center_gray_mean:.1f}",
                     flush=True,
                 )
                 last_debug_time = now
