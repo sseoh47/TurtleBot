@@ -13,6 +13,7 @@ bool startupRoutineActive = false;
 bool startupTriggered = false;
 uint8_t startupStep = 0;
 unsigned long startupStepStart = 0;
+bool class7Latched = false;
 
 
 void setup()
@@ -64,6 +65,7 @@ void loop()
     if (class_ == 3 || class_ == 4)
     {
         //handleEmergencyStop();
+        cancelClass7Straight();
         executeBaseAction(ACT_STOP, 0);
         return;
     }
@@ -73,11 +75,24 @@ void loop()
         driveMode = MODE_MANUAL;
     }
 
-    if (timedActionWait && class_ == 7 && currentAction != ACT_FORWARD)
+    if (class_ != 7 && !isClass7StraightActive())
     {
-        timedActionWait = false;
-        timedActionActive = false;
-        handleTimedAction(ACT_FORWARD, 0, 3250);
+        class7Latched = false;
+    }
+
+    if (
+        driveMode == MODE_MANUAL &&
+        ((class_ == 7 && !class7Latched) || isClass7StraightActive())
+    )
+    {
+        if (class_ == 7 && !class7Latched)
+        {
+            timedActionWait = false;
+            timedActionActive = false;
+            class7Latched = true;
+        }
+
+        handleClass7Straight();
         return;
     }
 
@@ -111,7 +126,6 @@ void loop()
             break;
 
         case 7:
-            handleTimedAction(ACT_FORWARD, 0, 3250);
             break;
 
         case 9:

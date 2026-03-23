@@ -4,6 +4,9 @@ DriveMode driveMode = MODE_MANUAL;
 
 // class 0에서 사용할 최근 유효 조향각
 static float heldDriveAngle = 0.0f;
+static bool class7StraightActive = false;
+static unsigned long class7StraightStart = 0;
+static const unsigned long class7StraightDuration = 1000;
 
 // =========================
 // 초기화
@@ -12,6 +15,8 @@ void initDrive()
 {
     driveMode = MODE_MANUAL;
     heldDriveAngle = 0.0f;
+    class7StraightActive = false;
+    class7StraightStart = 0;
 }
 
 // =========================
@@ -96,7 +101,7 @@ void handleLineFollow(float angle)
         return;
 
     heldDriveAngle = angle;
-    executeBaseAction(ACT_SLOW, angle);
+    executeBaseAction(ACT_SLOW, angle, 3.0f);
 }
 
 // =========================
@@ -153,6 +158,41 @@ void handleTimedAction(BaseAction act, float angle, unsigned long duration)
         {
             timedActionActive = false;
         }
+    }
+}
+
+bool isClass7StraightActive()
+{
+    if (class7StraightActive && millis() - class7StraightStart >= class7StraightDuration)
+    {
+        class7StraightActive = false;
+    }
+
+    return class7StraightActive;
+}
+
+void cancelClass7Straight()
+{
+    class7StraightActive = false;
+    class7StraightStart = 0;
+}
+
+void handleClass7Straight()
+{
+    if (driveMode == MODE_EMERGENCY || driveMode == MODE_ROUTINE || driveMode == MODE_LOGISTICIn)
+        return;
+
+    if (!isClass7StraightActive())
+    {
+        class7StraightActive = true;
+        class7StraightStart = millis();
+    }
+
+    executeBaseAction(ACT_FORWARD, 0.0f);
+
+    if (!isClass7StraightActive())
+    {
+        cancelClass7Straight();
     }
 }
 

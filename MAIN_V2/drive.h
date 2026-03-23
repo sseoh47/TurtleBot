@@ -88,6 +88,9 @@ void handleLineFollow(float angle);
 // void handleStraight(float angle);
 // void handleLeftTurn(float angle);
 void handleTimedAction(BaseAction act, float angle, unsigned long duration);
+void handleClass7Straight();
+bool isClass7StraightActive();
+void cancelClass7Straight();
 
 void handleEmergencyStop();
 void handleResume();
