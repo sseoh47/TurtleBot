@@ -46,7 +46,7 @@ def signal_det(
 
     # 일반 차선 + 라이다 동작 있으면 그대로 반영
     if line_id == 1 and lidar_action != 0:
-        return 1, 0, lidar_action
+        return 1, angle, lidar_action
 
     # 특수 lane 상황
     # left_t / down_t 는 임베디드에서 별도 처리
@@ -59,7 +59,7 @@ def signal_det(
 
     # 일반 차선
     if line_id == 1:
-        return 1, 0, lidar_action
+        return 1, angle, lidar_action
 
     # 차선 없음
     return 0, 0.0, lidar_action

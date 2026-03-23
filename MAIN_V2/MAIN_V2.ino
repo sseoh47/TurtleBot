@@ -83,12 +83,13 @@ void loop()
     {
         case 0:
             if (action) handleSpecialTarget(class_, angle, action);
-            else handleLineLost();
+            else executeBaseAction(ACT_SLOW, 0.0f);
+            //else handleLineLost();
             break;
 
         case 1:
             if (action) handleSpecialTarget(class_, angle, action);
-            else handleLineFollow(normalizeLineAngle(angle));
+            else handleLineFollow(angle);
             break;
 
         case 2:

@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Optional
 
 import cv2
+import numpy as np
 
 from vision.camera import RPiMJPEGCamera
 from vision.postprocess import convert_lane_result, convert_object_result
@@ -16,6 +17,120 @@ from vision.lane_postprocess import (
     parse_obstacle,
 )
 from vision.postprocess import convert_lane_result, convert_object_result
+
+
+CV_LANE_PROC_WIDTH = 320
+CV_LANE_ROI_TOP_RATIO = 0.6
+CV_LANE_THRESHOLD = 200
+CV_LANE_ROW_HALF_HEIGHT = 3
+CV_LANE_MIN_SIDE_PIXELS = 8
+CV_LANE_ROW_RATIOS = (0.75, 0.50, 0.25)
+CV_LANE_SIDE_MIN_PIXELS = 60
+CV_LANE_MAX_STEER = 10.0
+CV_LANE_SEARCH_STEER = 5.0
+CV_LANE_SLOPE_SUM_LIMIT = 0.30
+
+
+def _resize_for_cv_lane(frame):
+    height, width = frame.shape[:2]
+    if height <= 0 or width <= 0:
+        return frame
+
+    target_width = min(CV_LANE_PROC_WIDTH, width)
+    target_height = max(1, int(round(height * (target_width / float(width)))))
+    interp = cv2.INTER_AREA if target_width < width else cv2.INTER_LINEAR
+    return cv2.resize(frame, (target_width, target_height), interpolation=interp)
+
+
+def _extract_cv_lane_mask(frame):
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    _, mask = cv2.threshold(gray, CV_LANE_THRESHOLD, 255, cv2.THRESH_BINARY)
+
+    top = int(mask.shape[0] * CV_LANE_ROI_TOP_RATIO)
+    mask[:top, :] = 0
+    return mask
+
+
+def _scan_cv_lane_row(mask, row):
+    height, width = mask.shape
+    band = mask[max(0, row - CV_LANE_ROW_HALF_HEIGHT):min(height, row + CV_LANE_ROW_HALF_HEIGHT + 1), :]
+    _, xs = np.nonzero(band)
+
+    if xs.size == 0:
+        return None, None
+
+    mid = width // 2
+    left_xs = xs[xs < mid]
+    right_xs = xs[xs >= mid]
+
+    left = float(left_xs.mean()) if left_xs.size >= CV_LANE_MIN_SIDE_PIXELS else None
+    right = float(right_xs.mean()) if right_xs.size >= CV_LANE_MIN_SIDE_PIXELS else None
+    return left, right
+
+
+def _fit_cv_lane_slope(points):
+    if len(points) < 2:
+        return None
+
+    ys = np.array([point[0] for point in points], dtype=np.float32)
+    xs = np.array([point[1] for point in points], dtype=np.float32)
+    slope, _ = np.polyfit(ys, xs, 1)
+    return float(slope)
+
+
+def _normalize_cv_lane_steer(value):
+    if CV_LANE_SLOPE_SUM_LIMIT <= 0:
+        return 0.0
+
+    steer = (value / CV_LANE_SLOPE_SUM_LIMIT) * CV_LANE_MAX_STEER
+    return float(np.clip(steer, -CV_LANE_MAX_STEER, CV_LANE_MAX_STEER))
+
+
+def compute_cv_lane_angle(frame, fallback_angle):
+    if frame is None or frame.size == 0:
+        return float(fallback_angle)
+
+    lane_frame = _resize_for_cv_lane(frame)
+    mask = _extract_cv_lane_mask(lane_frame)
+
+    height, width = mask.shape
+    roi_top = int(height * CV_LANE_ROI_TOP_RATIO)
+    roi_height = max(1, height - roi_top)
+    left_points = []
+    right_points = []
+
+    for ratio in CV_LANE_ROW_RATIOS:
+        row = roi_top + int(roi_height * ratio)
+        row = min(height - 1, max(roi_top, row))
+        left, right = _scan_cv_lane_row(mask, row)
+
+        if left is not None:
+            left_points.append((float(row), left))
+        if right is not None:
+            right_points.append((float(row), right))
+
+    mid = width // 2
+    left_count = cv2.countNonZero(mask[:, :mid])
+    right_count = cv2.countNonZero(mask[:, mid:])
+
+    left_detected = left_count >= CV_LANE_SIDE_MIN_PIXELS
+    right_detected = right_count >= CV_LANE_SIDE_MIN_PIXELS
+
+    if left_detected and not right_detected:
+        return CV_LANE_SEARCH_STEER
+    if right_detected and not left_detected:
+        return -CV_LANE_SEARCH_STEER
+    if not left_detected and not right_detected:
+        return float(fallback_angle)
+
+    if len(left_points) >= 2 and len(right_points) >= 2:
+        left_slope = _fit_cv_lane_slope(left_points)
+        right_slope = _fit_cv_lane_slope(right_points)
+
+        if left_slope is not None and right_slope is not None:
+            return _normalize_cv_lane_steer(left_slope + right_slope)
+
+    return float(fallback_angle)
 
 
 @dataclass
@@ -306,6 +421,8 @@ class DualModelRunner:
         (p_is, p_it), _ = self.fsm.update(lane_shapes)
 
         line_id, angle = convert_lane_result(p_le, p_ls, p_is, p_it)
+        if line_id == 1:
+            angle = compute_cv_lane_angle(frame, angle)
         obj_id = convert_object_result(obs_list)
 
         # print(
