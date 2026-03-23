@@ -42,6 +42,10 @@ STARTUP_SEND_INTERVAL = 0.05
 CENTER_BLACK_Y_START_RATIO = 0.6
 CENTER_BLACK_Y_END_RATIO = 0.7
 CENTER_BLACK_HALF_WIDTH_RATIO = 0.08
+CENTER_TAPE_R_MAX = 50
+CENTER_TAPE_G_MIN = 100
+CENTER_TAPE_G_MAX = 200
+CENTER_TAPE_B_MIN = 200
 CENTER_TAPE_MIN_PIXELS = 1
 
 # Send steering in the -10 to +10 range.
@@ -150,7 +154,12 @@ def detect_center_tape(
     r = center_roi[:, :, 0]
     g = center_roi[:, :, 1]
     b = center_roi[:, :, 2]
-    in_range = (b > g) & (g > r)
+    in_range = (
+        (r <= CENTER_TAPE_R_MAX)
+        & (g >= CENTER_TAPE_G_MIN)
+        & (g <= CENTER_TAPE_G_MAX)
+        & (b >= CENTER_TAPE_B_MIN)
+    )
     match_count = int(np.count_nonzero(in_range))
     return (
         match_count >= CENTER_TAPE_MIN_PIXELS,
