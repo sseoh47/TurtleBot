@@ -42,8 +42,13 @@ STARTUP_SEND_INTERVAL = 0.05
 CENTER_BLACK_Y_START_RATIO = 0.6
 CENTER_BLACK_Y_END_RATIO = 0.7
 CENTER_BLACK_HALF_WIDTH_RATIO = 0.08
-CENTER_TAPE_GRAY_MIN = 30.0
-CENTER_TAPE_GRAY_MAX = 80.0
+CENTER_TAPE_R_MIN = 40
+CENTER_TAPE_R_MAX = 120
+CENTER_TAPE_G_MIN = 130
+CENTER_TAPE_G_MAX = 220
+CENTER_TAPE_B_MIN = 180
+CENTER_TAPE_B_MAX = 255
+CENTER_TAPE_MIN_PIXELS = 5
 
 # Send steering in the -10 to +10 range.
 TX_ANGLE_SCALE = 2.0
@@ -134,9 +139,8 @@ def normalize_steer(value: float, limit: float) -> float:
 
 def detect_center_tape(
     frame_rgb: np.ndarray,
-) -> tuple[bool, float, tuple[int, int, int, int]]:
-    gray = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2GRAY)
-    height, width = gray.shape
+) -> tuple[bool, tuple[float, float, float], int, tuple[int, int, int, int]]:
+    height, width = frame_rgb.shape[:2]
     y1 = int(height * CENTER_BLACK_Y_START_RATIO)
     y2 = int(height * CENTER_BLACK_Y_END_RATIO)
     mid = width // 2
@@ -144,15 +148,24 @@ def detect_center_tape(
     x1 = max(0, mid - half_w)
     x2 = min(width, mid + half_w)
 
-    center_roi = gray[y1:y2, x1:x2]
+    center_roi = frame_rgb[y1:y2, x1:x2]
     if center_roi.size == 0:
-        return False, 255.0, (x1, y1, x2, y2)
+        return False, (0.0, 0.0, 0.0), 0, (x1, y1, x2, y2)
 
-    mean_gray = float(center_roi.mean())
-    in_range = (center_roi >= CENTER_TAPE_GRAY_MIN) & (center_roi <= CENTER_TAPE_GRAY_MAX)
+    mean_rgb = tuple(float(v) for v in center_roi.reshape(-1, 3).mean(axis=0))
+    r = center_roi[:, :, 0]
+    g = center_roi[:, :, 1]
+    b = center_roi[:, :, 2]
+    in_range = (
+        (r >= CENTER_TAPE_R_MIN) & (r <= CENTER_TAPE_R_MAX) &
+        (g >= CENTER_TAPE_G_MIN) & (g <= CENTER_TAPE_G_MAX) &
+        (b >= CENTER_TAPE_B_MIN) & (b <= CENTER_TAPE_B_MAX)
+    )
+    match_count = int(np.count_nonzero(in_range))
     return (
-        bool(np.any(in_range)),
-        mean_gray,
+        match_count >= CENTER_TAPE_MIN_PIXELS,
+        mean_rgb,
+        match_count,
         (x1, y1, x2, y2),
     )
 
@@ -163,7 +176,8 @@ def build_debug_frame(
     steer: float,
     tx_class_id: int,
     center_tape: bool,
-    center_gray_mean: float,
+    center_rgb_mean: tuple[float, float, float],
+    center_match_count: int,
     center_rect: tuple[int, int, int, int],
     left_count: int,
     right_count: int,
@@ -214,7 +228,11 @@ def build_debug_frame(
     )
     cv2.putText(
         debug,
-        f"case={tx_class_id} center_tape={'Y' if center_tape else 'N'} gray={center_gray_mean:.1f}",
+        (
+            f"case={tx_class_id} center_tape={'Y' if center_tape else 'N'} "
+            f"rgb=({center_rgb_mean[0]:.0f},{center_rgb_mean[1]:.0f},{center_rgb_mean[2]:.0f}) "
+            f"hit={center_match_count}"
+        ),
         (10, 84),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.55,
@@ -310,7 +328,7 @@ def main() -> None:
             proc_rgb = resize_letterbox(frame_rgb, args.proc_size)
             mask = extract_mask(proc_rgb)
             last_steer, left_count, right_count = compute_steer(mask, last_steer)
-            center_tape, center_gray_mean, center_rect = detect_center_tape(proc_rgb)
+            center_tape, center_rgb_mean, center_match_count, center_rect = detect_center_tape(proc_rgb)
             tx_class_id = CLASS_CENTER_BLACK if center_tape else CLASS_LINE_FOLLOW
             tx_angle = 0.0 if center_tape else last_steer * TX_ANGLE_SCALE
 
@@ -324,7 +342,8 @@ def main() -> None:
                     last_steer,
                     tx_class_id,
                     center_tape,
-                    center_gray_mean,
+                    center_rgb_mean,
+                    center_match_count,
                     center_rect,
                     left_count,
                     right_count,
@@ -343,7 +362,9 @@ def main() -> None:
                     f"proc={args.proc_size}x{args.proc_size} "
                     f"left_pixels={left_count} right_pixels={right_count} "
                     f"steer={last_steer:.1f} class={tx_class_id} "
-                    f"center_tape={center_tape} gray={center_gray_mean:.1f}",
+                    f"center_tape={center_tape} "
+                    f"rgb=({center_rgb_mean[0]:.0f},{center_rgb_mean[1]:.0f},{center_rgb_mean[2]:.0f}) "
+                    f"hit={center_match_count}",
                     flush=True,
                 )
                 last_debug_time = now
