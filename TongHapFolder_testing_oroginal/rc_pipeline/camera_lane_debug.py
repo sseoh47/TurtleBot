@@ -4,12 +4,20 @@ from __future__ import annotations
 
 import argparse
 import time
+import sys
+from pathlib import Path
 
 import cv2
 import numpy as np
 
 from config import CAM_FPS, CAM_H, CAM_W, CAMERA_SOURCE
-from vision.camera import RPiMJPEGCamera
+
+CURRENT_DIR = Path(__file__).resolve().parent
+VISION_DIR = CURRENT_DIR / "vision"
+if str(VISION_DIR) not in sys.path:
+    sys.path.insert(0, str(VISION_DIR))
+
+from camera import RPiMJPEGCamera
 
 
 PROC_WIDTH = 320
