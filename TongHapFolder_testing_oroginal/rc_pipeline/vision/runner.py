@@ -119,9 +119,9 @@ def detect_cv_center_black(frame):
     if center_roi.size == 0:
         return False
 
-    b = center_roi[:, :, 0]
+    r = center_roi[:, :, 0]
     g = center_roi[:, :, 1]
-    r = center_roi[:, :, 2]
+    b = center_roi[:, :, 2]
     in_range = (
         (r <= CV_CENTER_TAPE_R_MAX)
         & (g >= CV_CENTER_TAPE_G_MIN)
