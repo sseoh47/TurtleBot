@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 import cv2
+import matplotlib.pyplot as plt
 import numpy as np
 
 from config import CAM_FPS, CAM_H, CAM_W, CAMERA_SOURCE
@@ -33,6 +34,63 @@ MAX_STEER = 10.0
 SEARCH_STEER = 5.0
 SLOPE_SUM_LIMIT = 0.30
 DEBUG_PRINT_INTERVAL = 0.5
+
+
+class DebugDisplay:
+    def __init__(self):
+        self.backend = "opencv"
+        self.fig = None
+        self.ax = None
+        self.image = None
+        self.should_quit = False
+
+    def _on_key(self, event):
+        if event.key in ("q", "escape"):
+            self.should_quit = True
+
+    def _show_matplotlib(self, frame_bgr: np.ndarray) -> None:
+        frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+
+        if self.fig is None:
+            plt.ion()
+            self.fig, self.ax = plt.subplots(num="lane-debug")
+            self.fig.canvas.mpl_connect("key_press_event", self._on_key)
+            self.image = self.ax.imshow(frame_rgb)
+            self.ax.axis("off")
+            plt.show(block=False)
+        else:
+            self.image.set_data(frame_rgb)
+
+        self.fig.canvas.draw_idle()
+        plt.pause(0.001)
+
+        if not plt.fignum_exists(self.fig.number):
+            self.should_quit = True
+
+    def show(self, frame_bgr: np.ndarray) -> None:
+        if self.backend == "opencv":
+            try:
+                cv2.imshow("lane-debug", frame_bgr)
+                key = cv2.waitKey(1) & 0xFF
+                if key == 27 or key == ord("q"):
+                    self.should_quit = True
+                return
+            except cv2.error:
+                self.backend = "matplotlib"
+                print("[INFO] cv2.imshow unavailable, fallback to matplotlib viewer")
+
+        self._show_matplotlib(frame_bgr)
+
+    def close(self) -> None:
+        if self.backend == "opencv":
+            try:
+                cv2.destroyAllWindows()
+            except cv2.error:
+                pass
+            return
+
+        if self.fig is not None:
+            plt.close(self.fig)
 
 
 def build_camera(source, width: int, height: int, fps: int):
@@ -293,6 +351,7 @@ def main() -> None:
     camera_kind, camera = build_camera(source, args.width, args.height, args.fps)
     last_steer = 0.0
     last_debug_time = 0.0
+    display = DebugDisplay()
 
     try:
         while True:
@@ -323,10 +382,8 @@ def main() -> None:
                     left_points,
                     right_points,
                 )
-                cv2.imshow("lane-debug", debug_frame)
-
-                key = cv2.waitKey(1) & 0xFF
-                if key == 27 or key == ord("q"):
+                display.show(debug_frame)
+                if display.should_quit:
                     break
 
             now = time.monotonic()
@@ -341,7 +398,7 @@ def main() -> None:
     finally:
         release_camera(camera_kind, camera)
         if not args.headless:
-            cv2.destroyAllWindows()
+            display.close()
 
 
 if __name__ == "__main__":
