@@ -108,7 +108,7 @@ bool timedActionWait = false;
 
 unsigned long actionStart = 0;      // 시작 시각
 unsigned long actionDuration = 0;   // 유지 시간(ms)
-unsigned long waitDuration=3200;
+unsigned long waitDuration=3000;
 
 BaseAction currentAction;           // ACT_LEFT / ACT_FORWARD ...
 float currentAngle = 0;             // 조향각
@@ -134,7 +134,8 @@ void handleTimedAction(BaseAction act, float angle, unsigned long duration)
     if (timedActionWait)
     {
         // 대기 중에는 기존 차선 주행 유지
-        executeBaseAction(ACT_FORWARD, heldDriveAngle);
+        //executeBaseAction(ACT_FORWARD, heldDriveAngle);
+        executeBaseAction(ACT_FORWARD, 0);
 
         if (millis() - actionStart >= waitDuration)
         {

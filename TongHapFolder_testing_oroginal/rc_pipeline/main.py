@@ -54,6 +54,8 @@ from config import (
 ENABLE_ARDUINO_SEND_TIMING = True
 ARDUINO_SEND_TIMING_EVERY = 20
 ARDUINO_SEND_TIMING_PRINT_EACH = False
+ENABLE_LIDAR_ACTION4_COOLDOWN = True
+LIDAR_ACTION4_COOLDOWN_SEC = 10.0
 
 
 class ArduinoSendTimingLogger:
@@ -144,6 +146,8 @@ def main():
         last_send_time = 0.0
         start_signal_until = 0.0
         lidar_ignore_until = time.monotonic() + 10.0
+        lidar_action4_lock_until = 0.0
+        prev_lidar_action = 0
         send_timing_logger = ArduinoSendTimingLogger(
             enabled=ENABLE_ARDUINO_SEND_TIMING,
             report_every=ARDUINO_SEND_TIMING_EVERY,
@@ -184,8 +188,27 @@ def main():
 
             if now < lidar_ignore_until:
                 lidar_action = 0
+            elif (
+                ENABLE_LIDAR_ACTION4_COOLDOWN
+                and now < lidar_action4_lock_until
+            ):
+                lidar_action = 0
             else:
                 lidar_action = lidar.check_action()
+                if (
+                    ENABLE_LIDAR_ACTION4_COOLDOWN
+                    and prev_lidar_action == 4
+                    and lidar_action != 4
+                ):
+                    lidar_action4_lock_until = now + LIDAR_ACTION4_COOLDOWN_SEC
+                    lidar_action = 0
+                    if DEBUG:
+                        print(
+                            f"[LIDAR] action 4 ended -> cooldown "
+                            f"{LIDAR_ACTION4_COOLDOWN_SEC:.1f}s"
+                        )
+
+                prev_lidar_action = lidar_action
 
             final_class, final_angle, final_action = signal_det(
                 obj_id=result.obj_id,
