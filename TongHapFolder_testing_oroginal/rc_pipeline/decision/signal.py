@@ -1,7 +1,7 @@
 from typing import Optional, Tuple
 
 
-MAX_DRIVE_ANGLE = 3.0
+MAX_DRIVE_ANGLE = 2.0
 
 
 def clamp_drive_angle(angle: float) -> float:
