@@ -29,10 +29,11 @@ CV_LANE_SIDE_MIN_PIXELS = 60
 CV_LANE_MAX_STEER = 2.0
 CV_LANE_SEARCH_STEER = 2.0
 CV_LANE_SLOPE_SUM_LIMIT = 0.30
-CV_CENTER_BLACK_Y_START_RATIO = 0.70
-CV_CENTER_BLACK_Y_END_RATIO = 0.92
+CV_CENTER_BLACK_Y_START_RATIO = 0.60
+CV_CENTER_BLACK_Y_END_RATIO = 0.70
 CV_CENTER_BLACK_HALF_WIDTH_RATIO = 0.08
-CV_CENTER_BLACK_WHITE_RATIO_MAX = 0.02
+CV_CENTER_TAPE_GRAY_MIN = 30.0
+CV_CENTER_TAPE_GRAY_MAX = 80.0
 
 
 def _resize_for_cv_lane(frame):
@@ -102,8 +103,8 @@ def detect_cv_center_black(frame):
         return False
 
     lane_frame = _resize_for_cv_lane(frame)
-    mask = _extract_cv_lane_mask(lane_frame)
-    height, width = mask.shape
+    gray = cv2.cvtColor(lane_frame, cv2.COLOR_BGR2GRAY)
+    height, width = gray.shape
 
     y1 = int(height * CV_CENTER_BLACK_Y_START_RATIO)
     y2 = int(height * CV_CENTER_BLACK_Y_END_RATIO)
@@ -112,12 +113,15 @@ def detect_cv_center_black(frame):
     x1 = max(0, mid - half_w)
     x2 = min(width, mid + half_w)
 
-    center_roi = mask[y1:y2, x1:x2]
+    center_roi = gray[y1:y2, x1:x2]
     if center_roi.size == 0:
         return False
 
-    white_ratio = cv2.countNonZero(center_roi) / float(center_roi.size)
-    return white_ratio <= CV_CENTER_BLACK_WHITE_RATIO_MAX
+    in_range = (
+        (center_roi >= CV_CENTER_TAPE_GRAY_MIN)
+        & (center_roi <= CV_CENTER_TAPE_GRAY_MAX)
+    )
+    return bool(np.any(in_range))
 
 
 def compute_cv_lane_angle(frame, fallback_angle):
