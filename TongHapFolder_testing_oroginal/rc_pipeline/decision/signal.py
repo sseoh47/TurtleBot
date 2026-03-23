@@ -61,7 +61,7 @@ def signal_det(
 
     # 특수 lane 상황
     # left_t / down_t 는 임베디드에서 별도 처리
-    if line_id in (6, 8):
+    if line_id in (6, 7, 8):
         return line_id, 0, 0
 
     # cross는 직진 유지 성격

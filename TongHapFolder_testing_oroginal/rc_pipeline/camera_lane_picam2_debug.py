@@ -14,6 +14,7 @@ from picamera2 import Picamera2
 
 START_BYTE = 0xAC
 CLASS_LINE_FOLLOW = 1
+CLASS_CENTER_BLACK = 7
 CLASS_STARTUP = 9
 ACTION_NONE = 0
 
@@ -38,6 +39,10 @@ DEBUG_PRINT_INTERVAL = 0.5
 SHOW_DEBUG = True
 STARTUP_SIGNAL_SECONDS = 3.0
 STARTUP_SEND_INTERVAL = 0.05
+CENTER_BLACK_Y_START_RATIO = 0.70
+CENTER_BLACK_Y_END_RATIO = 0.92
+CENTER_BLACK_HALF_WIDTH_RATIO = 0.08
+CENTER_BLACK_WHITE_RATIO_MAX = 0.02
 
 # Send steering in the -10 to +10 range.
 TX_ANGLE_SCALE = 2.0
@@ -126,10 +131,33 @@ def normalize_steer(value: float, limit: float) -> float:
     return float(np.clip((value / limit) * MAX_STEER, -MAX_STEER, MAX_STEER))
 
 
+def detect_center_black(
+    mask: np.ndarray,
+) -> tuple[bool, float, tuple[int, int, int, int]]:
+    height, width = mask.shape
+    y1 = int(height * CENTER_BLACK_Y_START_RATIO)
+    y2 = int(height * CENTER_BLACK_Y_END_RATIO)
+    mid = width // 2
+    half_w = max(1, int(width * CENTER_BLACK_HALF_WIDTH_RATIO))
+    x1 = max(0, mid - half_w)
+    x2 = min(width, mid + half_w)
+
+    center_roi = mask[y1:y2, x1:x2]
+    if center_roi.size == 0:
+        return False, 1.0, (x1, y1, x2, y2)
+
+    white_ratio = cv2.countNonZero(center_roi) / float(center_roi.size)
+    return white_ratio <= CENTER_BLACK_WHITE_RATIO_MAX, white_ratio, (x1, y1, x2, y2)
+
+
 def build_debug_frame(
     frame_rgb: np.ndarray,
     mask: np.ndarray,
     steer: float,
+    tx_class_id: int,
+    center_black: bool,
+    center_white_ratio: float,
+    center_rect: tuple[int, int, int, int],
     left_count: int,
     right_count: int,
     capture_width: int,
@@ -179,13 +207,26 @@ def build_debug_frame(
     )
     cv2.putText(
         debug,
-        f"raw={capture_width}x{capture_height} -> proc={width}x{height}",
+        f"class={tx_class_id} center_black={'Y' if center_black else 'N'} ratio={center_white_ratio:.3f}",
         (10, 84),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.55,
         (0, 255, 255),
         2,
     )
+    cv2.putText(
+        debug,
+        f"raw={capture_width}x{capture_height} -> proc={width}x{height}",
+        (10, 108),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.55,
+        (0, 255, 255),
+        2,
+    )
+
+    x1, y1, x2, y2 = center_rect
+    rect_color = (0, 0, 255) if center_black else (255, 255, 0)
+    cv2.rectangle(debug, (x1, y1), (x2, y2), rect_color, 2)
     return debug
 
 
@@ -262,15 +303,22 @@ def main() -> None:
             proc_rgb = resize_letterbox(frame_rgb, args.proc_size)
             mask = extract_mask(proc_rgb)
             last_steer, left_count, right_count = compute_steer(mask, last_steer)
+            center_black, center_white_ratio, center_rect = detect_center_black(mask)
+            tx_class_id = CLASS_CENTER_BLACK if center_black else CLASS_LINE_FOLLOW
+            tx_angle = 0.0 if center_black else last_steer * TX_ANGLE_SCALE
 
             if ser is not None:
-                send_packet(ser, last_steer * TX_ANGLE_SCALE)
+                send_packet(ser, tx_angle, class_id=tx_class_id)
 
             if SHOW_DEBUG and not args.headless:
                 debug_frame = build_debug_frame(
                     proc_rgb,
                     mask,
                     last_steer,
+                    tx_class_id,
+                    center_black,
+                    center_white_ratio,
+                    center_rect,
                     left_count,
                     right_count,
                     args.capture_width,
@@ -286,7 +334,9 @@ def main() -> None:
                 print(
                     f"raw={args.capture_width}x{args.capture_height} "
                     f"proc={args.proc_size}x{args.proc_size} "
-                    f"left_pixels={left_count} right_pixels={right_count} steer={last_steer:.1f}",
+                    f"left_pixels={left_count} right_pixels={right_count} "
+                    f"steer={last_steer:.1f} class={tx_class_id} "
+                    f"center_black={center_black} ratio={center_white_ratio:.3f}",
                     flush=True,
                 )
                 last_debug_time = now

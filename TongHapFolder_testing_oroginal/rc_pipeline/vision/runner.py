@@ -29,6 +29,10 @@ CV_LANE_SIDE_MIN_PIXELS = 60
 CV_LANE_MAX_STEER = 2.0
 CV_LANE_SEARCH_STEER = 2.0
 CV_LANE_SLOPE_SUM_LIMIT = 0.30
+CV_CENTER_BLACK_Y_START_RATIO = 0.70
+CV_CENTER_BLACK_Y_END_RATIO = 0.92
+CV_CENTER_BLACK_HALF_WIDTH_RATIO = 0.08
+CV_CENTER_BLACK_WHITE_RATIO_MAX = 0.02
 
 
 def _resize_for_cv_lane(frame):
@@ -91,6 +95,29 @@ def _normalize_cv_lane_steer(value):
 
     steer = (value / CV_LANE_SLOPE_SUM_LIMIT) * CV_LANE_MAX_STEER
     return float(np.clip(steer, -CV_LANE_MAX_STEER, CV_LANE_MAX_STEER))
+
+
+def detect_cv_center_black(frame):
+    if frame is None or frame.size == 0:
+        return False
+
+    lane_frame = _resize_for_cv_lane(frame)
+    mask = _extract_cv_lane_mask(lane_frame)
+    height, width = mask.shape
+
+    y1 = int(height * CV_CENTER_BLACK_Y_START_RATIO)
+    y2 = int(height * CV_CENTER_BLACK_Y_END_RATIO)
+    mid = width // 2
+    half_w = max(1, int(width * CV_CENTER_BLACK_HALF_WIDTH_RATIO))
+    x1 = max(0, mid - half_w)
+    x2 = min(width, mid + half_w)
+
+    center_roi = mask[y1:y2, x1:x2]
+    if center_roi.size == 0:
+        return False
+
+    white_ratio = cv2.countNonZero(center_roi) / float(center_roi.size)
+    return white_ratio <= CV_CENTER_BLACK_WHITE_RATIO_MAX
 
 
 def compute_cv_lane_angle(frame, fallback_angle):
@@ -429,7 +456,10 @@ class DualModelRunner:
         (p_is, p_it), _ = self.fsm.update(lane_shapes)
 
         line_id, angle = convert_lane_result(p_le, p_ls, p_is, p_it)
-        if line_id == 1:
+        if detect_cv_center_black(frame):
+            line_id = 7
+            angle = 0.0
+        elif line_id == 1:
             angle = compute_cv_lane_angle(frame, self.cv_lane_last_angle)
             self.cv_lane_last_angle = angle
         obj_id = convert_object_result(obs_list)
