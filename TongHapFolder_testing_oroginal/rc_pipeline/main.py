@@ -218,6 +218,7 @@ def main():
                 lidar_action=lidar_action,
                 start_signal=start_signal,
             )
+            center_tape = result.center_tape
 
             # 매 프레임 핵심 로그
             if DEBUG:
