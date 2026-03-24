@@ -86,7 +86,6 @@ class ArduinoSendTimingLogger:
                 f"[TXAVG{self.count}] arduino_send avg={avg_ms:.3f}ms, "
                 f"last={elapsed_ms:.3f}ms, max={self.max_ms:.3f}ms"
             )
-            center_tape = result.center_tape
             self.count = 0
             self.sum_ms = 0.0
             self.max_ms = 0.0
