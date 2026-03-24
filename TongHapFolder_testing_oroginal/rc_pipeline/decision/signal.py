@@ -54,7 +54,9 @@ def signal_det(
     if line_id == 1 and lidar_action != 0:
         return 1, clamp_drive_angle(angle), lidar_action
 
-    # Ignore class 7 while a lidar action is active so it cannot interrupt action handling.
+    if line_id in (6, 8) and lidar_action != 0:
+        return 1, 0.0, lidar_action
+
     if line_id == 7 and lidar_action != 0:
         return 0, 0.0, lidar_action
 
