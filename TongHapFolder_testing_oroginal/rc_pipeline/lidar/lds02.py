@@ -167,7 +167,7 @@ class LDS02:
         except Exception as e:
             print(f"[lidar] update Error")
             return 0
-        d1 = self.is_object_in_range(45, 90, 400)
+        d1 = self.is_object_in_range(45, 60, 400)
         d2 = self.is_object_in_range(95, 110, 350)
         d3 = self.is_object_in_range(-20, 0, 350)
         d4 = self.is_object_in_range(-15, 15, 300)
