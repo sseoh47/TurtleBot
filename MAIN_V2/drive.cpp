@@ -112,7 +112,7 @@ bool timedActionWait = false;
 
 unsigned long actionStart = 0;      // 시작 시각
 unsigned long actionDuration = 0;   // 유지 시간(ms)
-unsigned long waitDuration=3200;
+unsigned long waitDuration=3100;
 
 BaseAction currentAction;           // ACT_LEFT / ACT_FORWARD ...
 float currentAngle = 0;             // 조향각
