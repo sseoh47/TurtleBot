@@ -280,7 +280,8 @@ void handleSpecialTarget(int classId, float angle, int action)
             else if (classId == 10)
                 startRoutine(logisticsRoutinePASS, logisticsRoutinePASSLength);
             else
-                executeBaseAction(ACT_REVERSE, 0.0f);
+                startRoutine(logisticsRoutinePASS, logisticsRoutinePASSLength);
+                //executeBaseAction(ACT_REVERSE, 0.0f);
             break;
 
         default:

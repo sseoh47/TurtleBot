@@ -86,6 +86,7 @@ class ArduinoSendTimingLogger:
                 f"[TXAVG{self.count}] arduino_send avg={avg_ms:.3f}ms, "
                 f"last={elapsed_ms:.3f}ms, max={self.max_ms:.3f}ms"
             )
+            center_tape = result.center_tape
             self.count = 0
             self.sum_ms = 0.0
             self.max_ms = 0.0
@@ -224,7 +225,7 @@ def main():
                     f"[DBG] line={result.line_id}, "
                     f"obj={result.obj_id}, "
                     f"angle={result.angle}, "
-                    f"center_tape={result.center_tape}, "
+                    f"center_tape={center_tape}, "
                     f"class={final_class}, "
                     f"action={final_action}, "
                     f"lidar={lidar_action}, "
@@ -305,7 +306,7 @@ def main():
                         f"obj={result.obj_id}, "
                         f"line={result.line_id}, "
                         f"angle={result.angle}, "
-                        f"center_tape={result.center_tape}, "
+                        f"center_tape={center_tape}, "
                         f"lane_status={result.lane_status}, "
                         f"inter={result.inter_type}, "
                         f"lidar={lidar_action}, "
