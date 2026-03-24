@@ -167,14 +167,14 @@ class LDS02:
         except Exception as e:
             print(f"[lidar] update Error")
             return 0
-        d1 = self.is_object_in_range(45, 90, 300)
+        d1 = self.is_object_in_range(45, 90, 400)
         d2 = self.is_object_in_range(95, 110, 300)
-        d3 = self.is_object_in_range(-15, 15, 300)
-        d4 = self.is_object_in_range(-15, 15, 200)
+        d3 = self.is_object_in_range(-20, 0, 300)
+        d4 = self.is_object_in_range(-15, 15, 250)
 
         m1 = self.get_min_distance(45, 90)
         m2 = self.get_min_distance(95, 110)
-        m3 = self.get_min_distance(-15, 0)
+        m3 = self.get_min_distance(-20, 0)
         m4 = self.get_min_distance(-15, 15)
         # debug
         # print(f"[LIDAR] stage={self.stage} m1={m1} m2={m2} m3={m3} m4={m4}")

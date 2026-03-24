@@ -230,11 +230,8 @@ void updateRoutine()
 // ================= class 1,2,5,10 특수 처리 =================
 void handleSpecialTarget(int classId, float angle, int action)
 {
-    if (driveMode == MODE_EMERGENCY)
-        return;
-
     // 루틴 중이면 일반 특수 처리 무시
-    if (driveMode == MODE_ROUTINE || driveMode == MODE_LOGISTICIn )
+    if (driveMode == MODE_ROUTINE || driveMode == MODE_LOGISTICIn || driveMode == MODE_EMERGENCY)
         return;
 
     if (action != 3)
@@ -265,7 +262,6 @@ void handleSpecialTarget(int classId, float angle, int action)
                 executeBaseAction(ACT_STOP, 0.0f);
                 return;
             }
-
             executeBaseAction(ACT_SLOW, angle);
             break;
 
