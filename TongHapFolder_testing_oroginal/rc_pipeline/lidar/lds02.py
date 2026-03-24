@@ -64,6 +64,13 @@ class LDS02:
         self.stage = 0
         self.stage4_start = None
 
+    def clear_buffer_and_state(self):
+        self.reset_stage()
+        self.ranges = [None] * 360
+        self.timestamps = [0.0] * 360
+        if self.ser.is_open:
+            self.ser.reset_input_buffer()
+
     def _read_exact(self, n: int) -> bytes:
         data = self.ser.read(n)
         if len(data) != n:

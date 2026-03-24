@@ -147,6 +147,7 @@ def main():
         start_signal_until = 0.0
         lidar_ignore_until = time.monotonic() + 10.0
         lidar_action4_lock_until = 0.0
+        lidar_action4_reset_pending = False
         prev_lidar_action = 0
         send_timing_logger = ArduinoSendTimingLogger(
             enabled=ENABLE_ARDUINO_SEND_TIMING,
@@ -194,21 +195,31 @@ def main():
             ):
                 lidar_action = 0
             else:
-                lidar_action = lidar.check_action()
-                if (
-                    ENABLE_LIDAR_ACTION4_COOLDOWN
-                    and prev_lidar_action == 4
-                    and lidar_action != 4
-                ):
-                    lidar_action4_lock_until = now + LIDAR_ACTION4_COOLDOWN_SEC
+                if ENABLE_LIDAR_ACTION4_COOLDOWN and lidar_action4_reset_pending:
+                    lidar.clear_buffer_and_state()
+                    lidar_action4_reset_pending = False
+                    lidar_action4_lock_until = 0.0
                     lidar_action = 0
+                    prev_lidar_action = 0
                     if DEBUG:
-                        print(
-                            f"[LIDAR] action 4 ended -> cooldown "
-                            f"{LIDAR_ACTION4_COOLDOWN_SEC:.1f}s"
-                        )
+                        print("[LIDAR] action 4 cooldown ended -> lidar state cleared")
+                else:
+                    lidar_action = lidar.check_action()
+                    if (
+                        ENABLE_LIDAR_ACTION4_COOLDOWN
+                        and prev_lidar_action == 4
+                        and lidar_action != 4
+                    ):
+                        lidar_action4_lock_until = now + LIDAR_ACTION4_COOLDOWN_SEC
+                        lidar_action4_reset_pending = True
+                        lidar_action = 0
+                        if DEBUG:
+                            print(
+                                f"[LIDAR] action 4 ended -> cooldown "
+                                f"{LIDAR_ACTION4_COOLDOWN_SEC:.1f}s"
+                            )
 
-                prev_lidar_action = lidar_action
+                    prev_lidar_action = lidar_action
 
             final_class, final_angle, final_action = signal_det(
                 obj_id=result.obj_id,
