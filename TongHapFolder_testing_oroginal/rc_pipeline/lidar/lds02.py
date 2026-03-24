@@ -168,9 +168,9 @@ class LDS02:
             print(f"[lidar] update Error")
             return 0
         d1 = self.is_object_in_range(45, 90, 400)
-        d2 = self.is_object_in_range(95, 110, 300)
-        d3 = self.is_object_in_range(-20, 0, 300)
-        d4 = self.is_object_in_range(-15, 15, 250)
+        d2 = self.is_object_in_range(95, 110, 350)
+        d3 = self.is_object_in_range(-20, 0, 350)
+        d4 = self.is_object_in_range(-15, 15, 300)
 
         m1 = self.get_min_distance(45, 90)
         m2 = self.get_min_distance(95, 110)
