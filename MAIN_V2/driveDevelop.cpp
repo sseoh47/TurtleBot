@@ -1,7 +1,7 @@
 #include "drive.h"
 //테스트
 static unsigned long stopStart = 0;
-static const unsigned long STOP_DURATION = 3000; // 3000ms 정지
+static const unsigned long STOP_DURATION = 1000; // 3000ms 정지
 
 // ================= setup 시작 루틴  =================
 void updateStartupRoutine()
@@ -230,14 +230,11 @@ void updateRoutine()
 // ================= class 1,2,5,10 특수 처리 =================
 void handleSpecialTarget(int classId, float angle, int action)
 {
-    if (driveMode == MODE_EMERGENCY)
-        return;
-
     // 루틴 중이면 일반 특수 처리 무시
-    if (driveMode == MODE_ROUTINE || driveMode == MODE_LOGISTICIn )
+    if (driveMode == MODE_ROUTINE || driveMode == MODE_LOGISTICIn || driveMode == MODE_EMERGENCY)
         return;
 
-    if (action != 3)
+    if (action != 4)
     {
         slowActionActive = false;
     }
@@ -254,6 +251,11 @@ void handleSpecialTarget(int classId, float angle, int action)
             break;
             
         case 3:
+            executeBaseAction(ACT_SLOW, angle);
+            break;
+
+
+        case 4:
             if (!slowActionActive)
             {
                 slowActionActive = true;
@@ -266,11 +268,6 @@ void handleSpecialTarget(int classId, float angle, int action)
                 return;
             }
 
-            executeBaseAction(ACT_SLOW, angle);
-            break;
-
-
-        case 4:
             slowActionActive = false;
             // action4 : 정면 근접 정지
             executeBaseAction(ACT_STOP, 0.0f);
@@ -284,7 +281,8 @@ void handleSpecialTarget(int classId, float angle, int action)
             else if (classId == 10)
                 startRoutine(logisticsRoutinePASS, logisticsRoutinePASSLength);
             else
-                executeBaseAction(ACT_REVERSE, 0.0f);
+                startRoutine(logisticsRoutinePASS, logisticsRoutinePASSLength);
+                //executeBaseAction(ACT_REVERSE, 0.0f);
             break;
 
         default:

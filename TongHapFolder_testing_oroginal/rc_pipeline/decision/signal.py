@@ -1,6 +1,17 @@
 from typing import Optional, Tuple
 
 
+MAX_DRIVE_ANGLE = 2.0
+
+
+def clamp_drive_angle(angle: float) -> float:
+    if angle < -MAX_DRIVE_ANGLE:
+        return -MAX_DRIVE_ANGLE
+    if angle > MAX_DRIVE_ANGLE:
+        return MAX_DRIVE_ANGLE
+    return angle
+
+
 def signal_det(
     obj_id: Optional[int],
     line_id: Optional[int],
@@ -10,8 +21,8 @@ def signal_det(
 ) -> Tuple[int, Optional[float], int]:
     """
     class:
-      0  차선 없음
-      1  일반 차선
+      0  lane_lost
+      1  normal_lane
       2  SL
       3  person
       4  car
@@ -19,47 +30,43 @@ def signal_det(
       6  left_t
       8  down_t
       9  cross
-      10 KNU / box / 물류 pass 계열
+      10 KNU / box / logistics-pass family
 
     action:
-      0 기본
-      1 서행
-      2 정지
-      3 좌측 제자리 90도 회전
-      4 우측 제자리 90도 회전 (현재 미사용)
+      0 default
+      1 slow
+      2 rotate_left
+      3 stop_then_go
+      4 special_routine
     """
-    # angle은 가능하면 항상 숫자로 유지
     if angle is None:
         angle = 0.0
 
-    # 출발 신호는 별도 class 10으로 사용
     if start_signal:
         return 9, 0.0, 0
 
-    # 사람 / 차량은 즉시 우선
     if obj_id in (3, 4):
         return obj_id, 0.0, 0
 
-    # SL / parking / KNU(box/pass 포함)
     if obj_id in (2, 5, 10):
         return obj_id, 0.0, lidar_action
 
-    # 일반 차선 + 라이다 동작 있으면 그대로 반영
     if line_id == 1 and lidar_action != 0:
-        return 1, 0, lidar_action
+        return 1, clamp_drive_angle(angle), lidar_action
 
-    # 특수 lane 상황
-    # left_t / down_t 는 임베디드에서 별도 처리
-    if line_id in (6, 8):
+    if line_id in (6, 8) and lidar_action != 0:
+        return 1, 0.0, lidar_action
+
+    if line_id == 7 and lidar_action != 0:
+        return 0, 0.0, lidar_action
+
+    if line_id in (6, 7, 8):
         return line_id, 0, 0
 
-    # cross는 직진 유지 성격
     if line_id == 9:
         return 9, 0, 0
 
-    # 일반 차선
     if line_id == 1:
-        return 1, 0, lidar_action
+        return 1, clamp_drive_angle(angle), lidar_action
 
-    # 차선 없음
     return 0, 0.0, lidar_action

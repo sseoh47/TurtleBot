@@ -51,6 +51,46 @@ from config import (
 )
 
 
+ENABLE_ARDUINO_SEND_TIMING = True
+ARDUINO_SEND_TIMING_EVERY = 20
+ARDUINO_SEND_TIMING_PRINT_EACH = False
+ENABLE_LIDAR_ACTION4_COOLDOWN = True
+LIDAR_ACTION4_COOLDOWN_SEC = 10.0
+
+
+class ArduinoSendTimingLogger:
+    """Set ENABLE_ARDUINO_SEND_TIMING=False to disable runtime logs quickly."""
+
+    def __init__(self, enabled: bool, report_every: int, print_each: bool):
+        self.enabled = enabled
+        self.report_every = max(1, int(report_every))
+        self.print_each = print_each
+        self.count = 0
+        self.sum_ms = 0.0
+        self.max_ms = 0.0
+
+    def record(self, elapsed_ms: float) -> None:
+        if not self.enabled:
+            return
+
+        self.count += 1
+        self.sum_ms += elapsed_ms
+        self.max_ms = max(self.max_ms, elapsed_ms)
+
+        if self.print_each:
+            print(f"[TX] arduino_send={elapsed_ms:.3f}ms")
+
+        if self.count >= self.report_every:
+            avg_ms = self.sum_ms / self.count
+            print(
+                f"[TXAVG{self.count}] arduino_send avg={avg_ms:.3f}ms, "
+                f"last={elapsed_ms:.3f}ms, max={self.max_ms:.3f}ms"
+            )
+            self.count = 0
+            self.sum_ms = 0.0
+            self.max_ms = 0.0
+
+
 def get_key_nonblock():
     """
     엔터 없이 키 1개 읽기.
@@ -106,6 +146,14 @@ def main():
         last_send_time = 0.0
         start_signal_until = 0.0
         lidar_ignore_until = time.monotonic() + 10.0
+        lidar_action4_lock_until = 0.0
+        lidar_action4_reset_pending = False
+        prev_lidar_action = 0
+        send_timing_logger = ArduinoSendTimingLogger(
+            enabled=ENABLE_ARDUINO_SEND_TIMING,
+            report_every=ARDUINO_SEND_TIMING_EVERY,
+            print_each=ARDUINO_SEND_TIMING_PRINT_EACH,
+        )
 
         # 10루프 평균 timing 로그용
         avg_every = 10
@@ -141,8 +189,37 @@ def main():
 
             if now < lidar_ignore_until:
                 lidar_action = 0
+            elif (
+                ENABLE_LIDAR_ACTION4_COOLDOWN
+                and now < lidar_action4_lock_until
+            ):
+                lidar_action = 0
             else:
-                lidar_action = lidar.check_action()
+                if ENABLE_LIDAR_ACTION4_COOLDOWN and lidar_action4_reset_pending:
+                    lidar.clear_buffer_and_state()
+                    lidar_action4_reset_pending = False
+                    lidar_action4_lock_until = 0.0
+                    lidar_action = 0
+                    prev_lidar_action = 0
+                    if DEBUG:
+                        print("[LIDAR] action 4 cooldown ended -> lidar state cleared")
+                else:
+                    lidar_action = lidar.check_action()
+                    if (
+                        ENABLE_LIDAR_ACTION4_COOLDOWN
+                        and prev_lidar_action == 4
+                        and lidar_action != 4
+                    ):
+                        lidar_action4_lock_until = now + LIDAR_ACTION4_COOLDOWN_SEC
+                        lidar_action4_reset_pending = True
+                        lidar_action = 0
+                        if DEBUG:
+                            print(
+                                f"[LIDAR] action 4 ended -> cooldown "
+                                f"{LIDAR_ACTION4_COOLDOWN_SEC:.1f}s"
+                            )
+
+                    prev_lidar_action = lidar_action
 
             final_class, final_angle, final_action = signal_det(
                 obj_id=result.obj_id,
@@ -151,6 +228,7 @@ def main():
                 lidar_action=lidar_action,
                 start_signal=start_signal,
             )
+            center_tape = result.center_tape
 
             # 매 프레임 핵심 로그
             if DEBUG:
@@ -158,6 +236,7 @@ def main():
                     f"[DBG] line={result.line_id}, "
                     f"obj={result.obj_id}, "
                     f"angle={result.angle}, "
+                    f"center_tape={center_tape}, "
                     f"class={final_class}, "
                     f"action={final_action}, "
                     f"lidar={lidar_action}, "
@@ -238,6 +317,7 @@ def main():
                         f"obj={result.obj_id}, "
                         f"line={result.line_id}, "
                         f"angle={result.angle}, "
+                        f"center_tape={center_tape}, "
                         f"lane_status={result.lane_status}, "
                         f"inter={result.inter_type}, "
                         f"lidar={lidar_action}, "
@@ -245,7 +325,13 @@ def main():
                     ),
                 )
 
-                arduino.send(cmd)
+                if send_timing_logger.enabled:
+                    send_started = time.perf_counter()
+                    arduino.send(cmd)
+                    send_elapsed_ms = (time.perf_counter() - send_started) * 1000.0
+                    send_timing_logger.record(send_elapsed_ms)
+                else:
+                    arduino.send(cmd)
                 last_send_time = now
 
     finally:
